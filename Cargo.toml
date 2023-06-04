@@ -3,9 +3,16 @@ name = "rust-las-printer"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "converter"
+path = "src/bin/converter.rs"
+
+[[bin]]
+name = "viewer"
+path = "src/bin/viewer.rs"
 
 [dependencies]
+bevy = "0.10.1"
 clap = { version = "4.3.1", features = ["derive"] }
 env_logger = "0.10.0"
 itertools = "0.10.5"

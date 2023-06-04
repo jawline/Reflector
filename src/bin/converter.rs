@@ -1,8 +1,5 @@
-mod heightmap;
-mod las_data;
-
-use crate::heightmap::las_data_to_opt_height_map;
-use crate::las_data::LasData;
+use rust_las_printer::heightmap::las_data_to_opt_height_map;
+use rust_las_printer::las_data::LasData;
 use clap::Parser;
 use log::info;
 
@@ -16,11 +13,17 @@ struct Args {
     #[arg(short, long)]
     output_path: String,
 
+    #[arg(short, long, default_value_t = 0.25)]
+    pixels_per_unit_dim: f64,
+
     #[arg(short, long, default_value_t = 1)]
     rounds_of_interpolated_hole_filling: usize,
 
     #[arg(short, long, default_value_t = 16)]
     consider_nearest_n_neighbors_for_interpolation: usize,
+
+    #[arg(short, long, default_value_t = false)]
+    max_y_is_low: bool,
 }
 
 fn main() {
@@ -39,7 +42,7 @@ fn main() {
 
     println!("Main pass, summarizing grid squares");
 
-    let grid_zones = las_data_to_opt_height_map(&data, 1.);
+    let grid_zones = las_data_to_opt_height_map(&data, args.pixels_per_unit_dim);
 
     info!("Flipping the Y axis");
     let mut grid_zones = grid_zones.flip_y();
@@ -56,5 +59,5 @@ fn main() {
     let grid_zones = grid_zones.normalize_z_by_and_fill_none_with_zero(data.max_z);
 
     info!("Writing to file");
-    grid_zones.write_to_png(&args.output_path);
+    grid_zones.write_to_png(&args.output_path, args.max_y_is_low);
 }

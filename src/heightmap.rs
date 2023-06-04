@@ -19,7 +19,7 @@ impl<T: Clone + Copy> Heightmap<T> {
         for (grid_x, grid_y) in iproduct!(0..self.width, 0..self.height) {
             let offset_output = ((self.height - grid_y - 1) * self.width) + grid_x;
             let offset_input = (grid_y * self.width) + grid_x;
-            flipped[offset_output] = flipped[offset_input];
+            flipped[offset_output] = self.data[offset_input];
         }
 
         Self {
@@ -77,19 +77,18 @@ impl Heightmap<Option<f64>> {
 }
 
 impl Heightmap<f64> {
-    pub fn write_to_png(&self, path: &str) {
+    pub fn write_to_png(&self, path: &str, max_y_is_low: bool) {
         let path = Path::new(path);
         let file = File::create(path).unwrap();
         let ref mut w = BufWriter::new(file);
-        let mut encoder =
-            png::Encoder::new(w, (self.width) as u32, (self.height) as u32);
+        let mut encoder = png::Encoder::new(w, (self.width) as u32, (self.height) as u32);
         encoder.set_color(png::ColorType::Grayscale);
         encoder.set_depth(png::BitDepth::Eight);
         let mut writer = encoder.write_header().unwrap();
         let zones_as_bytes: Vec<u8> = self
             .data
             .iter()
-            .map(|x| ((1. - x) * 255.) as u8)
+            .map(|x| ((if max_y_is_low { 1. - x } else { *x }) * 255.) as u8)
             .collect();
 
         writer.write_image_data(&zones_as_bytes).unwrap(); // Save
