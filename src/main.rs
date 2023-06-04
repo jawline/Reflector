@@ -5,9 +5,6 @@ use crate::heightmap::las_data_to_opt_height_map;
 use crate::las_data::LasData;
 use clap::Parser;
 use log::info;
-use std::fs::File;
-use std::io::BufWriter;
-use std::path::Path;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -21,6 +18,9 @@ struct Args {
 
     #[arg(short, long, default_value_t = 1)]
     rounds_of_interpolated_hole_filling: usize,
+
+    #[arg(short, long, default_value_t = 16)]
+    consider_nearest_n_neighbors_for_interpolation: usize,
 }
 
 fn main() {
@@ -46,7 +46,9 @@ fn main() {
 
     for i in 0..args.rounds_of_interpolated_hole_filling {
         info!("Neighbor filling round {}", i);
-        grid_zones = grid_zones.interpolate_missing_using_neighbors();
+        grid_zones = grid_zones.interpolate_missing_using_neighbors(
+            args.consider_nearest_n_neighbors_for_interpolation,
+        );
     }
 
     // Here every point will be some
@@ -54,19 +56,5 @@ fn main() {
     let grid_zones = grid_zones.normalize_z_by_and_fill_none_with_zero(data.max_z);
 
     info!("Writing to file");
-
-    let path = Path::new(r"./heatmap.png");
-    let file = File::create(path).unwrap();
-    let ref mut w = BufWriter::new(file);
-    let mut encoder = png::Encoder::new(w, (grid_zones.width) as u32, (grid_zones.height) as u32);
-    encoder.set_color(png::ColorType::Grayscale);
-    encoder.set_depth(png::BitDepth::Eight);
-    let mut writer = encoder.write_header().unwrap();
-    let zones_as_bytes: Vec<u8> = grid_zones
-        .data
-        .iter()
-        .map(|x| ((1. - x) * 255.) as u8)
-        .collect();
-
-    writer.write_image_data(&zones_as_bytes).unwrap(); // Save
+    grid_zones.write_to_png(&args.output_path);
 }

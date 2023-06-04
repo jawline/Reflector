@@ -2,9 +2,9 @@ use crate::las_data::LasData;
 use itertools::iproduct;
 use log::info;
 use medians::Medianf64;
-
-// TOOD: Parameterize
-const CONSIDER_NEAREST: usize = 32;
+use std::fs::File;
+use std::io::BufWriter;
+use std::path::Path;
 
 pub struct Heightmap<T: Clone + Copy> {
     pub data: Vec<T>,
@@ -31,21 +31,21 @@ impl<T: Clone + Copy> Heightmap<T> {
 }
 
 impl Heightmap<Option<f64>> {
-    pub fn interpolate_missing_using_neighbors(&self) -> Self {
+    pub fn interpolate_missing_using_neighbors(&self, consider_nearest: usize) -> Self {
         let mut grid_zones_smoothed = self.data.clone();
 
         for (grid_x, grid_y) in iproduct!(0..self.width, 0..self.height) {
             let offset = (grid_y * self.width) + grid_x;
 
             if self.data[offset].is_none() {
-                let nearest_x_start = grid_x.max(CONSIDER_NEAREST / 2) - (CONSIDER_NEAREST / 2);
-                let nearest_y_start = grid_y.max(CONSIDER_NEAREST / 2) - (CONSIDER_NEAREST / 2);
+                let nearest_x_start = grid_x.max(consider_nearest / 2) - (consider_nearest / 2);
+                let nearest_y_start = grid_y.max(consider_nearest / 2) - (consider_nearest / 2);
 
                 let mut nearest = Vec::new();
 
                 for (near_x, near_y) in iproduct!(
-                    nearest_x_start..(nearest_x_start + CONSIDER_NEAREST).min(self.width),
-                    nearest_y_start..(nearest_y_start + CONSIDER_NEAREST).min(self.height)
+                    nearest_x_start..(nearest_x_start + consider_nearest).min(self.width),
+                    nearest_y_start..(nearest_y_start + consider_nearest).min(self.height)
                 ) {
                     //println!("Consider {} {} for gapfill of {} {}", near_x, near_y, grid_x, grid_y);
                     let offset = (near_y * self.width) + near_x;
@@ -73,6 +73,26 @@ impl Heightmap<Option<f64>> {
             width: self.width,
             height: self.height,
         }
+    }
+}
+
+impl Heightmap<f64> {
+    pub fn write_to_png(&self, path: &str) {
+        let path = Path::new(path);
+        let file = File::create(path).unwrap();
+        let ref mut w = BufWriter::new(file);
+        let mut encoder =
+            png::Encoder::new(w, (self.width) as u32, (self.height) as u32);
+        encoder.set_color(png::ColorType::Grayscale);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().unwrap();
+        let zones_as_bytes: Vec<u8> = self
+            .data
+            .iter()
+            .map(|x| ((1. - x) * 255.) as u8)
+            .collect();
+
+        writer.write_image_data(&zones_as_bytes).unwrap(); // Save
     }
 }
 
