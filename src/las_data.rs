@@ -1,5 +1,5 @@
 use las::{Read, Reader};
-use log::{debug, info};
+use log::debug;
 use std::ffi::OsStr;
 use walkdir::WalkDir;
 
