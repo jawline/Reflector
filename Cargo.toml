@@ -15,9 +15,12 @@ path = "src/bin/viewer.rs"
 bevy = "0.10.1"
 clap = { version = "4.3.1", features = ["derive"] }
 env_logger = "0.10.0"
+fastblur = "0.1.1"
 itertools = "0.10.5"
 las = { version = "0.8.1", features = ["laz"] }
 log = "0.4.18"
 medians = "2.2.6"
 png = "0.17.8"
+postcard = { version = "1.0.4", features = ["alloc", "use-std"] }
+serde = "1.0.163"
 walkdir = "2.3.3"

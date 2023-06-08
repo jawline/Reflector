@@ -1,11 +1,14 @@
 use crate::las_data::LasData;
+use fastblur::gaussian_blur_asymmetric_single_channel;
 use itertools::iproduct;
 use log::info;
 use medians::Medianf64;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
+#[derive(Serialize, Deserialize)]
 pub struct Heightmap<T: Clone + Copy> {
     pub data: Vec<T>,
     pub width: usize,
@@ -55,7 +58,8 @@ impl Heightmap<Option<f64>> {
                 }
 
                 if nearest.len() > 0 {
-                    grid_zones_smoothed[offset] = Some(nearest.median().unwrap());
+                    grid_zones_smoothed[offset] =
+                        Some(*nearest.iter().min_by(|a, b| a.total_cmp(b)).unwrap());
                 }
             }
         }
@@ -67,17 +71,27 @@ impl Heightmap<Option<f64>> {
         }
     }
 
-    pub fn normalize_z_by_and_fill_none_with_zero(&self, max_z: f64) -> Heightmap<f64> {
+    pub fn fill_none_with_zero(&self) -> Heightmap<f64> {
         Heightmap {
-            data: self.data.iter().map(|x| x.unwrap_or(0.) / max_z).collect(),
+            data: self.data.iter().map(|x| x.unwrap_or(0.)).collect(),
             width: self.width,
             height: self.height,
         }
     }
 }
 
-impl Heightmap<f64> {
-    pub fn write_to_png(&self, path: &str, max_y_is_low: bool) {
+impl Heightmap<u8> {
+    pub fn blur(&mut self) {
+        gaussian_blur_asymmetric_single_channel(
+            &mut self.data,
+            self.width,
+            self.height,
+            0.25,
+            0.25,
+        );
+    }
+
+    pub fn write_to_png(&self, path: &str) {
         let path = Path::new(path);
         let file = File::create(path).unwrap();
         let ref mut w = BufWriter::new(file);
@@ -85,13 +99,39 @@ impl Heightmap<f64> {
         encoder.set_color(png::ColorType::Grayscale);
         encoder.set_depth(png::BitDepth::Eight);
         let mut writer = encoder.write_header().unwrap();
-        let zones_as_bytes: Vec<u8> = self
+
+        writer.write_image_data(&self.data).unwrap(); // Save
+    }
+}
+
+impl Heightmap<f64> {
+    pub fn to_u8(&self, max_y_is_low: bool) -> Heightmap<u8> {
+        let data: Vec<u8> = self
             .data
             .iter()
             .map(|x| ((if max_y_is_low { 1. - x } else { *x }) * 255.) as u8)
             .collect();
+        Heightmap {
+            data,
+            width: self.width,
+            height: self.height,
+        }
+    }
 
-        writer.write_image_data(&zones_as_bytes).unwrap(); // Save
+    pub fn normalize_z_by(&self, max_z: f64) -> Self {
+        Heightmap {
+            data: self.data.iter().map(|x| x / max_z).collect(),
+            width: self.width,
+            height: self.height,
+        }
+    }
+
+    pub fn map<F: Fn(f64) -> f64>(&self, f: F) -> Self {
+        Heightmap {
+            data: self.data.iter().map(|x| f(*x)).collect(),
+            width: self.width,
+            height: self.height,
+        }
     }
 }
 

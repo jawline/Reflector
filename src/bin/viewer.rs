@@ -1,5 +1,11 @@
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
+use itertools::iproduct;
+use rust_las_printer::heightmap::Heightmap;
+use std::{
+    fs::File,
+    io::{BufReader, Read},
+};
 
 fn main() {
     App::new()
@@ -9,25 +15,32 @@ fn main() {
         .run();
 }
 
+fn bytes(path: &str) -> Vec<u8> {
+    let f = File::open(path).unwrap();
+    let mut reader = BufReader::new(f);
+    let mut buffer = Vec::new();
+    reader.read_to_end(&mut buffer).unwrap();
+    buffer
+}
+
 /// set up a simple 3D scene
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // plane
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(shape::Plane::from_size(5.0).into()),
-        material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
-        ..default()
-    });
-    // cube
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-        material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
-        transform: Transform::from_xyz(0.0, 0.5, 0.0),
-        ..default()
-    });
+    let bytes = bytes("/home/blake/Downloads/test.bin");
+    let heightmap: Heightmap<f64> = postcard::from_bytes(&bytes).unwrap();
+
+    for (x, y) in iproduct!(0..heightmap.width, 0..heightmap.height) {
+        commands.spawn(PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
+            material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
+            transform: Transform::from_xyz(x as f32, y as f32, 0.),
+            ..default()
+        });
+    }
+
     // light
     commands.spawn(PointLightBundle {
         point_light: PointLight {

@@ -1,7 +1,11 @@
-use rust_las_printer::heightmap::las_data_to_opt_height_map;
-use rust_las_printer::las_data::LasData;
 use clap::Parser;
 use log::info;
+use rust_las_printer::heightmap::{las_data_to_opt_height_map, Heightmap};
+use rust_las_printer::las_data::LasData;
+use std::{
+    fs::File,
+    io::{BufWriter, Write},
+};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -24,6 +28,12 @@ struct Args {
 
     #[arg(short, long, default_value_t = false)]
     max_y_is_low: bool,
+
+    #[arg(short, long, default_value_t = true)]
+    write_to_png: bool,
+
+    #[arg(short, long, default_value_t = 0.0)]
+    min_z: f64,
 }
 
 fn main() {
@@ -56,8 +66,20 @@ fn main() {
 
     // Here every point will be some
     info!("Normalizing Z axis");
-    let grid_zones = grid_zones.normalize_z_by_and_fill_none_with_zero(data.max_z);
+    let grid_zones = grid_zones.fill_none_with_zero();
 
     info!("Writing to file");
-    grid_zones.write_to_png(&args.output_path, args.max_y_is_low);
+    if args.write_to_png {
+        let grid_zones = grid_zones
+            .normalize_z_by(data.max_z)
+            .map(|x| args.min_z + (x * (1. - args.min_z)))
+            .to_u8(args.max_y_is_low);
+        grid_zones.write_to_png(&args.output_path);
+    } else {
+        let file = File::open(args.output_path).unwrap();
+        let mut writer = BufWriter::new(file);
+        writer
+            .write(&postcard::to_stdvec::<Heightmap<f64>>(&grid_zones).unwrap())
+            .unwrap();
+    }
 }
