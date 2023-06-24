@@ -1,7 +1,7 @@
 use crate::to_3d_model::Model;
-use stl_io::{Vector, Triangle};
 use bevy::math::Vec3;
 use log::debug;
+use stl_io::{Triangle, Vector};
 
 /// Converts a model to stl::io Triangle's for writing to stl.
 pub fn to_stl(model: &Model) -> Vec<Triangle> {
@@ -12,7 +12,11 @@ pub fn to_stl(model: &Model) -> Vec<Triangle> {
         let index1 = model.indices[i] as usize;
         let index2 = model.indices[i + 1] as usize;
         let index3 = model.indices[i + 2] as usize;
-        let normal : [f32; 3] = ((Vec3::from(model.normals[index1]) + Vec3::from(model.normals[index2])  + Vec3::from(model.normals[index3])) / 3.).into();
+        let normal: [f32; 3] = ((Vec3::from(model.normals[index1])
+            + Vec3::from(model.normals[index2])
+            + Vec3::from(model.normals[index3]))
+            / 3.)
+            .into();
 
         let triangle = Triangle {
             normal: Vector::new(normal),

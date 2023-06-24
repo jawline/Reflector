@@ -80,7 +80,6 @@ fn setup(
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-
     let args = Args::parse();
     let bytes = bytes(&args.input_path);
     let heightmap: Heightmap<f64> = postcard::from_bytes(&bytes).unwrap();

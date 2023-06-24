@@ -33,7 +33,7 @@ impl<T: Clone + Copy> Heightmap<T> {
         }
     }
 
-    pub fn offset(&self, (x, y) : (usize, usize)) -> usize {
+    pub fn offset(&self, (x, y): (usize, usize)) -> usize {
         (y * self.width) + x
     }
 }

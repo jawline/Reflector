@@ -87,7 +87,6 @@ fn add_base(
     offset
 }
 
-
 /// Compute the normal as the cross product of (v1 - v2) nd (v1- v3). Depending on the direction
 /// the normal might need to be negated.
 fn compute_normal(
@@ -139,46 +138,22 @@ impl Model {
                 // it and making total the total area of all normals rather than a count.
 
                 if x > 0 && y > 0 {
-                    sum += -compute_normal(
-                        (x, y),
-                        (x, y - 1),
-                        (x - 1, y),
-                        &vertices,
-                        &heightmap,
-                    );
+                    sum += -compute_normal((x, y), (x, y - 1), (x - 1, y), &vertices, &heightmap);
                     total += 1;
                 }
 
                 if x < heightmap.width - 1 && y < heightmap.height - 1 {
-                    sum += -compute_normal(
-                        (x, y),
-                        (x, y + 1),
-                        (x + 1, y),
-                        &vertices,
-                        &heightmap,
-                    );
+                    sum += -compute_normal((x, y), (x, y + 1), (x + 1, y), &vertices, &heightmap);
                     total += 1;
                 }
 
                 if x > 0 && y < heightmap.height - 1 {
-                    sum += compute_normal(
-                        (x, y),
-                        (x, y + 1),
-                        (x - 1, y),
-                        &vertices,
-                        &heightmap,
-                    );
+                    sum += compute_normal((x, y), (x, y + 1), (x - 1, y), &vertices, &heightmap);
                     total += 1;
                 }
 
                 if x < heightmap.width - 1 && y > 0 {
-                    sum += -compute_normal(
-                        (x, y),
-                        (x + 1, y),
-                        (x, y - 1),
-                        &vertices,
-                        &heightmap,
-                    );
+                    sum += -compute_normal((x, y), (x + 1, y), (x, y - 1), &vertices, &heightmap);
                     total += 1;
                 }
 
@@ -227,7 +202,7 @@ impl Model {
         for y in 0..(heightmap.height - 1) {
             for x in 0..(heightmap.width - 1) {
                 let xoff = heightmap.offset((x, y)) as u32;
-                let next_y_xoff = heightmap.offset((x, y+1))  as u32;
+                let next_y_xoff = heightmap.offset((x, y + 1)) as u32;
                 indices.push(xoff);
                 indices.push(next_y_xoff);
                 indices.push(xoff + 1);
