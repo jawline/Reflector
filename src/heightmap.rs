@@ -32,6 +32,10 @@ impl<T: Clone + Copy> Heightmap<T> {
             height: self.height,
         }
     }
+
+    pub fn offset(&self, (x, y) : (usize, usize)) -> usize {
+        (y * self.width) + x
+    }
 }
 
 impl<T: Clone + Copy> Index<(usize, usize)> for Heightmap<T> {

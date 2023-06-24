@@ -80,11 +80,13 @@ fn setup(
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+
     let args = Args::parse();
     let bytes = bytes(&args.input_path);
     let heightmap: Heightmap<f64> = postcard::from_bytes(&bytes).unwrap();
     let (mesh, heightmap_texture) = heightmap_to_mesh_and_image(&heightmap);
     let (start_x, start_y) = (heightmap.width as f32 / 2., heightmap.height as f32 / 2.);
+
     commands.spawn(PbrBundle {
         mesh: meshes.add(mesh),
         material: materials.add(StandardMaterial {
@@ -110,11 +112,8 @@ fn setup(
             rotation: (Quat::from_rotation_z(-PI / 1.) + Quat::from_rotation_x(-PI / 1.5)),
             ..default()
         },
-        // The default cascade config is designed to handle large scenes.
-        // As this example has a much smaller world, we can tighten the shadow
-        // bounds for better visual quality.
         cascade_shadow_config: CascadeShadowConfigBuilder {
-            minimum_distance: 1.,
+            minimum_distance: 0.01,
             maximum_distance: 10000.,
             ..default()
         }

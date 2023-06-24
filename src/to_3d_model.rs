@@ -9,6 +9,7 @@ pub struct Model {
     pub indices: Vec<u32>,
 }
 
+/// Add a border along the y axis at a fixed x (x should either be 0 or heightmap.height - 1)
 fn add_y_border(
     x: usize,
     norm: [f32; 3],
@@ -31,6 +32,7 @@ fn add_y_border(
     offset
 }
 
+/// Add a border along the x axis at a fixed y (y should either be 0 or heightmap.width - 1)
 fn add_x_border(
     y: usize,
     norm: [f32; 3],
@@ -53,6 +55,7 @@ fn add_x_border(
     offset
 }
 
+/// Add four vertices for a base to the model.
 fn add_base(
     vertices: &mut Vec<[f32; 3]>,
     normals: &mut Vec<[f32; 3]>,
@@ -84,20 +87,19 @@ fn add_base(
     offset
 }
 
-fn offset((x, y): (usize, usize), (width, _height): (usize, usize)) -> usize {
-    (y * width) + x
-}
 
+/// Compute the normal as the cross product of (v1 - v2) nd (v1- v3). Depending on the direction
+/// the normal might need to be negated.
 fn compute_normal(
     (x1, y1): (usize, usize),
     (x2, y2): (usize, usize),
     (x3, y3): (usize, usize),
     vertices: &[[f32; 3]],
-    (width, height): (usize, usize),
+    heightmap: &Heightmap<f64>,
 ) -> Vec3 {
-    let off1 = offset((x1, y1), (width, height));
-    let off2 = offset((x2, y2), (width, height));
-    let off3 = offset((x3, y3), (width, height));
+    let off1 = heightmap.offset((x1, y1));
+    let off2 = heightmap.offset((x2, y2));
+    let off3 = heightmap.offset((x3, y3));
 
     let va: Vec3 = vertices[off1].into();
     let vb: Vec3 = vertices[off2].into();
@@ -142,7 +144,7 @@ impl Model {
                         (x, y - 1),
                         (x - 1, y),
                         &vertices,
-                        (heightmap.width, heightmap.height),
+                        &heightmap,
                     );
                     total += 1;
                 }
@@ -153,7 +155,7 @@ impl Model {
                         (x, y + 1),
                         (x + 1, y),
                         &vertices,
-                        (heightmap.width, heightmap.height),
+                        &heightmap,
                     );
                     total += 1;
                 }
@@ -164,7 +166,7 @@ impl Model {
                         (x, y + 1),
                         (x - 1, y),
                         &vertices,
-                        (heightmap.width, heightmap.height),
+                        &heightmap,
                     );
                     total += 1;
                 }
@@ -175,7 +177,7 @@ impl Model {
                         (x + 1, y),
                         (x, y - 1),
                         &vertices,
-                        (heightmap.width, heightmap.height),
+                        &heightmap,
                     );
                     total += 1;
                 }
@@ -224,8 +226,8 @@ impl Model {
 
         for y in 0..(heightmap.height - 1) {
             for x in 0..(heightmap.width - 1) {
-                let xoff = ((y * heightmap.width) + x) as u32;
-                let next_y_xoff = (((y + 1) * heightmap.width) + x) as u32;
+                let xoff = heightmap.offset((x, y)) as u32;
+                let next_y_xoff = heightmap.offset((x, y+1))  as u32;
                 indices.push(xoff);
                 indices.push(next_y_xoff);
                 indices.push(xoff + 1);
@@ -242,8 +244,8 @@ impl Model {
             let x = 0;
             let y1 = left_row_offset + y;
             let y2 = left_row_offset + y + 1;
-            let y3 = ((y * heightmap.width) + x) as u32;
-            let y4 = (((y + 1) * heightmap.width) + x) as u32;
+            let y3 = heightmap.offset((x, y));
+            let y4 = heightmap.offset((x, y + 1));
 
             indices.push(y1 as u32);
             indices.push(y2 as u32);
@@ -258,8 +260,8 @@ impl Model {
             let x = heightmap.width - 1;
             let y1 = right_row_offset + y;
             let y2 = right_row_offset + y + 1;
-            let y3 = ((y * heightmap.width) + x) as u32;
-            let y4 = (((y + 1) * heightmap.width) + x) as u32;
+            let y3 = heightmap.offset((x, y));
+            let y4 = heightmap.offset((x, y + 1));
 
             indices.push(y4 as u32);
             indices.push(y2 as u32);
@@ -275,8 +277,8 @@ impl Model {
             let y = 0;
             let x1 = bottom_offset + x;
             let x2 = bottom_offset + x + 1;
-            let x3 = ((y * heightmap.width) + x) as u32;
-            let x4 = ((y * heightmap.width) + x + 1) as u32;
+            let x3 = heightmap.offset((x, y));
+            let x4 = heightmap.offset((x + 1, y));
 
             indices.push(x4 as u32);
             indices.push(x2 as u32);
@@ -291,8 +293,8 @@ impl Model {
             let y = heightmap.height - 1;
             let x1 = top_offset + x;
             let x2 = top_offset + x + 1;
-            let x3 = ((y * heightmap.width) + x) as u32;
-            let x4 = ((y * heightmap.width) + x + 1) as u32;
+            let x3 = heightmap.offset((x, y));
+            let x4 = heightmap.offset((x + 1, y));
 
             indices.push(x1 as u32);
             indices.push(x2 as u32);
