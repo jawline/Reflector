@@ -19,7 +19,12 @@ a heightmap or STL file using the instructions below.
 
 ## Creating a heightmap png for rendering in Blender
 
+Run `cargo run --release --bin converter -- --las-folder-path <PATH TO FOLDER CONTAINING LAS DATA> --pixels-per-unit-dim <use configured resolution per unit (x, _, z) square in the las file. 1 is a reasonable default> --rounds-of-interpolated-hole-filling 100 --consider-nearest-n-neighbors-for-interpolation 8 --output-path /tmp/test.png --base-depth 60`.
+
 ## Viewing LAS data in the viewer
+
+First run `cargo run --release --bin converter -- --las-folder-path <PATH TO FOLDER CONTAINING LAS DATA> --pixels-per-unit-dim <use configured resolution per unit (x, _, z) square in the las file. 1 is a reasonable default> --rounds-of-interpolated-hole-filling 100 --consider-nearest-n-neighbors-for-interpolation 8 --write-to-bin --output-path /tmp/test.bin --base-depth 60`
+to convert the LAS data to a bin file for viewing Next run `RUST_LOG=viewer=info cargo run --release --bin viewer -- /tmp/test.bin`.
 
 ## Creating an STL
 
