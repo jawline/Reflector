@@ -28,7 +28,7 @@ to convert the LAS data to a bin file for viewing Next run `RUST_LOG=viewer=info
 
 ## Creating an STL
 
-TODO;
+Run `cargo run --release --bin converter -- --las-folder-path <PATH TO FOLDER CONTAINING LAS DATA> --pixels-per-unit-dim 1 --rounds-of-interpolated-hole-filling 100 --consider-nearest-n-neighbors-for-interpolation 2 --write-to-stl  --output-path /tmp/test.stl --base-depth 60` to create /tmp/test.stl.
 
 # Example printed models
 

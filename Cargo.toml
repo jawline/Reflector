@@ -24,4 +24,5 @@ medians = "2.2.6"
 png = "0.17.8"
 postcard = { version = "1.0.4", features = ["alloc", "use-std"] }
 serde = "1.0.163"
+stl_io = "0.7.0"
 walkdir = "2.3.3"

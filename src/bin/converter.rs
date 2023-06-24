@@ -2,6 +2,8 @@ use clap::Parser;
 use log::info;
 use rust_las_printer::heightmap::{las_data_to_opt_height_map, Heightmap};
 use rust_las_printer::las_data::LasData;
+use rust_las_printer::to_3d_model::Model;
+use rust_las_printer::to_stl::to_stl;
 use std::{
     fs::File,
     io::{BufWriter, Write},
@@ -31,6 +33,9 @@ struct Args {
 
     #[arg(short, long, default_value_t = false)]
     write_to_bin: bool,
+
+    #[arg(short, long, default_value_t = false)]
+    write_to_stl: bool,
 
     #[arg(short, long, default_value_t = 0.0)]
     base_depth: f64,
@@ -69,18 +74,26 @@ fn main() {
     let grid_zones = grid_zones.fill_none_with_zero();
 
     info!("Writing to file");
-
     let grid_zones = grid_zones.add_base(args.base_depth);
 
-    if !args.write_to_bin {
-        let max_z = grid_zones.max_z();
-        let grid_zones = grid_zones.normalize_z_by(max_z).to_u8(args.max_y_is_low);
-        grid_zones.write_to_png(&args.output_path);
-    } else {
+    if args.write_to_bin && args.write_to_stl {
+        panic!("We expect only one of write_to_bin or write_to_stl to be set");
+    }
+
+    if args.write_to_stl {
+        let model = Model::of_heightmap(&grid_zones);
+        let mesh = to_stl(&model);
+        let mut file = File::create(args.output_path).unwrap();
+        stl_io::write_stl(&mut file, mesh.into_iter()).unwrap();
+    } else if args.write_to_bin {
         let file = File::create(args.output_path).unwrap();
         let mut writer = BufWriter::new(file);
         writer
             .write(&postcard::to_stdvec::<Heightmap<f64>>(&grid_zones).unwrap())
             .unwrap();
+    } else {
+        let max_z = grid_zones.max_z();
+        let grid_zones = grid_zones.normalize_z_by(max_z).to_u8(args.max_y_is_low);
+        grid_zones.write_to_png(&args.output_path);
     }
 }
