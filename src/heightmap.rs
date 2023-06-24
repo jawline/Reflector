@@ -136,6 +136,18 @@ impl Heightmap<f64> {
         }
     }
 
+    pub fn add_base(&self, depth: f64) -> Self {
+        Heightmap {
+            data: self.data.iter().map(|x| x + depth).collect(),
+            width: self.width,
+            height: self.height,
+        }
+    }
+
+    pub fn max_z(&self) -> f64 {
+        *self.data.iter().max_by(|a, b| a.total_cmp(b)).unwrap()
+    }
+
     pub fn normalize_z_by(&self, max_z: f64) -> Self {
         Heightmap {
             data: self.data.iter().map(|x| x / max_z).collect(),

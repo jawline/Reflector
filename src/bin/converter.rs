@@ -33,7 +33,7 @@ struct Args {
     write_to_bin: bool,
 
     #[arg(short, long, default_value_t = 0.0)]
-    min_z: f64,
+    base_depth: f64,
 }
 
 fn main() {
@@ -69,11 +69,12 @@ fn main() {
     let grid_zones = grid_zones.fill_none_with_zero();
 
     info!("Writing to file");
+
+    let grid_zones = grid_zones.add_base(args.base_depth);
+
     if !args.write_to_bin {
-        let grid_zones = grid_zones
-            .normalize_z_by(data.max_z)
-            .map(|x| args.min_z + (x * (1. - args.min_z)))
-            .to_u8(args.max_y_is_low);
+        let max_z = grid_zones.max_z();
+        let grid_zones = grid_zones.normalize_z_by(max_z).to_u8(args.max_y_is_low);
         grid_zones.write_to_png(&args.output_path);
     } else {
         let file = File::create(args.output_path).unwrap();

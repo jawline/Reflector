@@ -13,6 +13,7 @@ path = "src/bin/viewer.rs"
 
 [dependencies]
 bevy = "0.10.1"
+bevy_panorbit_camera = "0.5.2"
 clap = { version = "4.3.1", features = ["derive"] }
 env_logger = "0.10.0"
 fastblur = "0.1.1"
