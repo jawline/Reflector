@@ -28,20 +28,20 @@ TODO;
 # Example printed models
 
 <p float="left">
-  <img src="/example prints/print1.jpg" width="80%" />
-  <img src="/example prints/print2.jpg" width="80%" />
-  <img src="/example prints/print3.jpg" width="80%" />
-  <img src="/example prints/print4.jpg" width="80%" />
-  <img src="/example prints/print5.jpg" width="80%" />
-  <img src="/example prints/print6.jpg" width="80%" />
+  <img src="/example prints/print1.jpg" width="30%" />
+  <img src="/example prints/print2.jpg" width="30%" />
+  <img src="/example prints/print3.jpg" width="30%" />
+  <img src="/example prints/print4.jpg" width="30%" />
+  <img src="/example prints/print5.jpg" width="30%" />
+  <img src="/example prints/print6.jpg" width="30%" />
 </p>
 
 # Example renders
 
 <p float="left">
-  <img src="/example images/printable.png" width="80%" />
-  <img src="/example images/plover_cove.png" width="80%" />
-  <img src="/example images/central_1.png" width="80%" />
-  <img src="/example images/central_2.png" width="80%" />
-  <img src="/example images/central_3.png" width="80%" />
+  <img src="/example images/printable.png" width="30%" />
+  <img src="/example images/plover_cove.png" width="30%" />
+  <img src="/example images/central_1.png" width="30%" />
+  <img src="/example images/central_2.png" width="30%" />
+  <img src="/example images/central_3.png" width="30%" />
 </p>
