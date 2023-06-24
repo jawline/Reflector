@@ -38,7 +38,6 @@ Run `cargo run --release --bin converter -- --las-folder-path <PATH TO FOLDER CO
   <img src="/example prints/print3.jpg" width="30%" />
   <img src="/example prints/print4.jpg" width="30%" />
   <img src="/example prints/print5.jpg" width="30%" />
-  <img src="/example prints/print6.jpg" width="30%" />
 </p>
 
 # Example renders
