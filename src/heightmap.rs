@@ -6,6 +6,7 @@ use medians::Medianf64;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::BufWriter;
+use std::ops::Index;
 use std::path::Path;
 
 #[derive(Serialize, Deserialize)]
@@ -33,34 +34,51 @@ impl<T: Clone + Copy> Heightmap<T> {
     }
 }
 
+impl<T: Clone + Copy> Index<(usize, usize)> for Heightmap<T> {
+    type Output = T;
+
+    fn index(&self, (x, y): (usize, usize)) -> &Self::Output {
+        let idx = (y * self.width) + x;
+        &self.data[idx]
+    }
+}
+
 impl Heightmap<Option<f64>> {
     pub fn interpolate_missing_using_neighbors(&self, consider_nearest: usize) -> Self {
-        let mut grid_zones_smoothed = self.data.clone();
+        let mut grid_zones_smoothed = Vec::with_capacity(self.width * self.height);
 
-        for (grid_x, grid_y) in iproduct!(0..self.width, 0..self.height) {
-            let offset = (grid_y * self.width) + grid_x;
+        // We do not use itertools here as this code needs to push to grid_zones_smoothed in a
+        // specific order.
+        for grid_y in 0..self.height {
+            for grid_x in 0..self.width {
+                let offset = (grid_y * self.width) + grid_x;
 
-            if self.data[offset].is_none() {
-                let nearest_x_start = grid_x.max(consider_nearest / 2) - (consider_nearest / 2);
-                let nearest_y_start = grid_y.max(consider_nearest / 2) - (consider_nearest / 2);
+                let slot = match self.data[offset] {
+                    Some(data) => Some(data),
+                    None => {
+                        let mut nearest = Vec::with_capacity(consider_nearest * consider_nearest);
 
-                let mut nearest = Vec::new();
+                        let nearest_x_start = grid_x.max(consider_nearest) - (consider_nearest);
+                        let nearest_y_start = grid_y.max(consider_nearest) - (consider_nearest);
 
-                for (near_x, near_y) in iproduct!(
-                    nearest_x_start..(nearest_x_start + consider_nearest).min(self.width),
-                    nearest_y_start..(nearest_y_start + consider_nearest).min(self.height)
-                ) {
-                    //println!("Consider {} {} for gapfill of {} {}", near_x, near_y, grid_x, grid_y);
-                    let offset = (near_y * self.width) + near_x;
-                    if let Some(mode) = self.data[offset] {
-                        nearest.push(mode);
+                        for (near_x, near_y) in iproduct!(
+                            nearest_x_start..(nearest_x_start + consider_nearest).min(self.width),
+                            nearest_y_start..(nearest_y_start + consider_nearest).min(self.height)
+                        ) {
+                            let offset = (near_y * self.width) + near_x;
+                            if let Some(mode) = self.data[offset] {
+                                nearest.push(mode);
+                            }
+                        }
+
+                        if nearest.len() > 0 {
+                            Some(*nearest.iter().min_by(|a, b| a.total_cmp(b)).unwrap())
+                        } else {
+                            None
+                        }
                     }
-                }
-
-                if nearest.len() > 0 {
-                    grid_zones_smoothed[offset] =
-                        Some(*nearest.iter().min_by(|a, b| a.total_cmp(b)).unwrap());
-                }
+                };
+                grid_zones_smoothed.push(slot);
             }
         }
 
