@@ -28,12 +28,12 @@ TODO;
 # Example printed models
 
 <p float="left">
-  <img src="/example prints/print_1.jpg" width="80%" />
-  <img src="/example prints/print_2.jpg" width="80%" />
-  <img src="/example prints/print_3.jpg" width="80%" />
-  <img src="/example prints/print_4.jpg" width="80%" />
-  <img src="/example prints/print_5.jpg" width="80%" />
-  <img src="/example prints/print_6.jpg" width="80%" />
+  <img src="/example prints/print1.jpg" width="80%" />
+  <img src="/example prints/print2.jpg" width="80%" />
+  <img src="/example prints/print3.jpg" width="80%" />
+  <img src="/example prints/print4.jpg" width="80%" />
+  <img src="/example prints/print5.jpg" width="80%" />
+  <img src="/example prints/print6.jpg" width="80%" />
 </p>
 
 # Example renders
