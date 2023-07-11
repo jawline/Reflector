@@ -39,6 +39,14 @@ struct Args {
 
     #[arg(short, long, default_value_t = 0.0)]
     base_depth: f64,
+
+
+    #[arg(short, long, default_value_t = 1.0)]
+    scale_x: f64,
+    #[arg(short, long, default_value_t = 1.0)]
+    scale_y: f64,
+    #[arg(short, long, default_value_t = 1.0)]
+    scale_z: f64,
 }
 
 fn main() {
@@ -48,7 +56,7 @@ fn main() {
 
     println!("Reading LAS files from: {}", args.las_folder_path);
 
-    let data = LasData::load_from_directory(&args.las_folder_path);
+    let data = LasData::load_from_directory(&args.las_folder_path, (args.scale_x, args.scale_y, args.scale_z));
 
     info!(
         "Bounds: {} {} {} {} {} {}",

@@ -14,7 +14,7 @@ pub struct LasData {
 }
 
 impl LasData {
-    pub fn load_from_directory(path: &str) -> Self {
+    pub fn load_from_directory(path: &str, (scale_x, scale_y, scale_z) : (f64, f64, f64)) -> Self {
         let mut max_x = None;
         let mut min_x = None;
         let mut max_z = None;
@@ -39,14 +39,16 @@ impl LasData {
             for wrapped_point in reader.points() {
                 let wrapped_point = wrapped_point.unwrap();
 
-                max_x = Some(max_x.unwrap_or(wrapped_point.x).max(wrapped_point.x));
-                max_y = Some(max_y.unwrap_or(wrapped_point.y).max(wrapped_point.y));
-                max_z = Some(max_z.unwrap_or(wrapped_point.z).max(wrapped_point.z));
-                min_x = Some(min_x.unwrap_or(wrapped_point.x).min(wrapped_point.x));
-                min_y = Some(min_y.unwrap_or(wrapped_point.y).min(wrapped_point.y));
-                min_z = Some(min_z.unwrap_or(wrapped_point.z).min(wrapped_point.z));
+                let (x, y, z) = (wrapped_point.x / scale_x, wrapped_point.y / scale_y, wrapped_point.z / scale_z);
 
-                points.push((wrapped_point.x, wrapped_point.y, wrapped_point.z));
+                max_x = Some(max_x.unwrap_or(x).max(x));
+                max_y = Some(max_y.unwrap_or(y).max(y));
+                max_z = Some(max_z.unwrap_or(z).max(z));
+                min_x = Some(min_x.unwrap_or(x).min(x));
+                min_y = Some(min_y.unwrap_or(y).min(y));
+                min_z = Some(min_z.unwrap_or(z).min(z));
+
+                points.push((x, y, z));
             }
         }
 
