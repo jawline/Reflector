@@ -39,7 +39,7 @@ impl LasData {
             for wrapped_point in reader.points() {
                 let wrapped_point = wrapped_point.unwrap();
 
-                let (x, y, z) = (wrapped_point.x / scale_x, wrapped_point.y / scale_y, wrapped_point.z / scale_z);
+                let (x, y, z) = (wrapped_point.x * scale_x, wrapped_point.y * scale_y, wrapped_point.z * scale_z);
 
                 max_x = Some(max_x.unwrap_or(x).max(x));
                 max_y = Some(max_y.unwrap_or(y).max(y));

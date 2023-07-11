@@ -2,13 +2,6 @@ use crate::heightmap::Heightmap;
 use bevy::math::Vec3;
 use log::info;
 
-pub struct Model {
-    pub vertices: Vec<[f32; 3]>,
-    pub normals: Vec<[f32; 3]>,
-    pub uvs: Vec<[f32; 2]>,
-    pub indices: Vec<u32>,
-}
-
 /// Add a border along the y axis at a fixed x (x should either be 0 or heightmap.height - 1)
 fn add_y_border(
     x: usize,
@@ -106,7 +99,23 @@ fn compute_normal(
     (va - vc).cross(va - vb)
 }
 
+pub struct Model {
+    pub vertices: Vec<[f32; 3]>,
+    pub normals: Vec<[f32; 3]>,
+    pub uvs: Vec<[f32; 2]>,
+    pub indices: Vec<u32>,
+}
+
 impl Model {
+
+    pub fn scale(&mut self, (scale_x, scale_y, scale_z) : (f32, f32, f32)) {
+        for vertex in &mut self.vertices {
+            vertex[0] = vertex[0] * scale_x;
+            vertex[1] = vertex[1] * scale_y;
+            vertex[2] = vertex[2] * scale_z;
+        }
+    }
+
     pub fn of_heightmap(heightmap: &Heightmap<f64>) -> Self {
         let mut vertices = Vec::new();
         let mut uvs = Vec::new();
@@ -289,11 +298,14 @@ impl Model {
         indices.push(base_offset as u32 + 1);
         indices.push(base_offset as u32 + 2);
 
-        Model {
+        let mut result = Model {
             vertices,
             normals,
             uvs,
             indices,
-        }
+        };
+        let model_scale_factor = (1. / heightmap.pixels_per_distance_unit) as f32;
+        result.scale((model_scale_factor, 1., model_scale_factor));
+        result
     }
 }

@@ -14,6 +14,9 @@ pub struct Heightmap<T: Clone + Copy> {
     pub data: Vec<T>,
     pub width: usize,
     pub height: usize,
+
+    // We keep track of this so we can scale the stl or 3D models
+    pub pixels_per_distance_unit: f64,
 }
 
 impl<T: Clone + Copy> Heightmap<T> {
@@ -30,6 +33,7 @@ impl<T: Clone + Copy> Heightmap<T> {
             data: flipped,
             width: self.width,
             height: self.height,
+            pixels_per_distance_unit: self.pixels_per_distance_unit
         }
     }
 
@@ -90,6 +94,7 @@ impl Heightmap<Option<f64>> {
             data: grid_zones_smoothed,
             width: self.width,
             height: self.height,
+            pixels_per_distance_unit: self.pixels_per_distance_unit
         }
     }
 
@@ -98,6 +103,7 @@ impl Heightmap<Option<f64>> {
             data: self.data.iter().map(|x| x.unwrap_or(0.)).collect(),
             width: self.width,
             height: self.height,
+            pixels_per_distance_unit: self.pixels_per_distance_unit,
         }
     }
 }
@@ -137,6 +143,7 @@ impl Heightmap<f64> {
             data,
             width: self.width,
             height: self.height,
+            pixels_per_distance_unit: self.pixels_per_distance_unit,
         }
     }
 
@@ -145,6 +152,7 @@ impl Heightmap<f64> {
             data: self.data.iter().map(|x| x + depth).collect(),
             width: self.width,
             height: self.height,
+            pixels_per_distance_unit: self.pixels_per_distance_unit,
         }
     }
 
@@ -157,6 +165,7 @@ impl Heightmap<f64> {
             data: self.data.iter().map(|x| x / max_z).collect(),
             width: self.width,
             height: self.height,
+            pixels_per_distance_unit: self.pixels_per_distance_unit,
         }
     }
 
@@ -165,6 +174,7 @@ impl Heightmap<f64> {
             data: self.data.iter().map(|x| f(*x)).collect(),
             width: self.width,
             height: self.height,
+            pixels_per_distance_unit: self.pixels_per_distance_unit,
         }
     }
 }
@@ -213,5 +223,6 @@ pub fn las_data_to_opt_height_map(
         data: grid_zones,
         width: ext_x,
         height: ext_y,
+        pixels_per_distance_unit,
     }
 }
