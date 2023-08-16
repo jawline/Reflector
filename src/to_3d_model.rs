@@ -107,8 +107,7 @@ pub struct Model {
 }
 
 impl Model {
-
-    pub fn scale(&mut self, (scale_x, scale_y, scale_z) : (f32, f32, f32)) {
+    pub fn scale(&mut self, (scale_x, scale_y, scale_z): (f32, f32, f32)) {
         for vertex in &mut self.vertices {
             vertex[0] = vertex[0] * scale_x;
             vertex[1] = vertex[1] * scale_y;

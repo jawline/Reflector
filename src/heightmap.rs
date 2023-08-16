@@ -33,7 +33,7 @@ impl<T: Clone + Copy> Heightmap<T> {
             data: flipped,
             width: self.width,
             height: self.height,
-            pixels_per_distance_unit: self.pixels_per_distance_unit
+            pixels_per_distance_unit: self.pixels_per_distance_unit,
         }
     }
 
@@ -94,7 +94,7 @@ impl Heightmap<Option<f64>> {
             data: grid_zones_smoothed,
             width: self.width,
             height: self.height,
-            pixels_per_distance_unit: self.pixels_per_distance_unit
+            pixels_per_distance_unit: self.pixels_per_distance_unit,
         }
     }
 
@@ -179,11 +179,6 @@ impl Heightmap<f64> {
     }
 }
 
-#[derive(Debug, Clone)]
-struct GridZone {
-    pub points: Vec<f64>,
-}
-
 pub fn las_data_to_opt_height_map(
     data: &LasData,
     pixels_per_distance_unit: f64,
@@ -196,7 +191,7 @@ pub fn las_data_to_opt_height_map(
     info!("Derived GRID_X: {}, Derived GRID_Y: {}", grid_x, grid_y);
 
     let mut grid_zones = Vec::new();
-    grid_zones.resize(ext_x * ext_y, GridZone { points: Vec::new() });
+    grid_zones.resize(ext_x * ext_y, Vec::new());
 
     for (px, py, pz) in &data.points {
         let x_ratio = (px - data.min_x) / (data.max_x - data.min_x);
@@ -205,16 +200,16 @@ pub fn las_data_to_opt_height_map(
         let grid_y = (y_ratio * grid_y as f64).floor() as usize;
 
         let zone = &mut grid_zones[(grid_y * ext_x) + grid_x];
-        zone.points.push(*pz);
+        zone.push(*pz);
     }
 
     let grid_zones: Vec<Option<f64>> = grid_zones
         .iter()
         .map(|grid_zone| {
-            if grid_zone.points.is_empty() {
+            if grid_zone.is_empty() {
                 None
             } else {
-                Some(grid_zone.points.median().unwrap())
+                Some(grid_zone.median().unwrap())
             }
         })
         .collect();
