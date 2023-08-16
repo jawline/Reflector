@@ -12,6 +12,7 @@ pub fn to_stl(model: &Model) -> Vec<Triangle> {
         let index1 = model.indices[i] as usize;
         let index2 = model.indices[i + 1] as usize;
         let index3 = model.indices[i + 2] as usize;
+
         let normal: [f32; 3] = ((Vec3::from(model.normals[index1])
             + Vec3::from(model.normals[index2])
             + Vec3::from(model.normals[index3]))
