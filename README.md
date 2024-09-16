@@ -1,4 +1,4 @@
-# LAS to 3D Printer
+# Reflector
 
 This project produces 3D printable models from lidar data. Examples were
 generated from freely available data from Hong Kong but this should work for
