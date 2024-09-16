@@ -40,6 +40,9 @@ struct Args {
     #[arg(short, long, default_value_t = 0.0)]
     base_depth: f64,
 
+    #[arg(short, long)]
+    override_base_depth_for_tiles_with_no_data: Option<f64>,
+
     #[arg(long, default_value_t = 1.0)]
     scale_x: f64,
     #[arg(long, default_value_t = 1.0)]
@@ -90,10 +93,11 @@ fn main() {
 
     // Here every point will be some
     info!("Normalizing Z axis");
-    let grid_zones = grid_zones.fill_none_with_zero();
-
-    info!("Writing to file");
-    let grid_zones = grid_zones.add_base(args.base_depth);
+    let grid_zones = grid_zones.fill_none_with_zero_and_add_base(
+        args.base_depth,
+        args.override_base_depth_for_tiles_with_no_data
+            .unwrap_or(args.base_depth),
+    );
 
     if args.write_to_bin && args.write_to_stl {
         panic!("We expect only one of write_to_bin or write_to_stl to be set");

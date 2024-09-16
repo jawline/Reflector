@@ -98,9 +98,20 @@ impl Heightmap<Option<f64>> {
         }
     }
 
-    pub fn fill_none_with_zero(&self) -> Heightmap<f64> {
+    pub fn fill_none_with_zero_and_add_base(
+        &self,
+        base_height: f64,
+        base_height_when_none: f64,
+    ) -> Heightmap<f64> {
         Heightmap {
-            data: self.data.iter().map(|x| x.unwrap_or(0.)).collect(),
+            data: self
+                .data
+                .iter()
+                .map(|x| match x {
+                    Some(x) => x + base_height,
+                    None => base_height_when_none,
+                })
+                .collect(),
             width: self.width,
             height: self.height,
             pixels_per_distance_unit: self.pixels_per_distance_unit,
@@ -226,13 +237,7 @@ impl StreamingHeightmap {
         let grid_zones: Vec<Option<f64>> = self
             .grid_zones
             .iter()
-            .map(|grid_zone| {
-                if grid_zone.count() == 0 {
-                    None
-                } else {
-                    Some(grid_zone.median().unwrap())
-                }
-            })
+            .map(|grid_zone| grid_zone.median())
             .collect();
 
         info!("Summarized grid zones");

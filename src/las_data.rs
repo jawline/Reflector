@@ -1,5 +1,5 @@
 use las::{Read, Reader};
-use log::debug;
+use log::info;
 use std::ffi::OsStr;
 use walkdir::WalkDir;
 
@@ -7,7 +7,7 @@ pub fn load_from_directory<F>(path: &str, (scale_x, scale_y, scale_z): (f64, f64
 where
     F: FnMut(f64, f64, f64) -> (),
 {
-    println!("Beginning first pass");
+    info!("Beginning iteration over all LAS data");
 
     for entry in WalkDir::new(path)
         .max_depth(100)
@@ -16,7 +16,7 @@ where
         .filter(|e| e.file_type().is_file())
         .filter(|e| e.path().extension() == Some(&OsStr::new("las")))
     {
-        debug!("Loading path: {:?}", entry.path());
+        info!("Loading path: {:?}", entry.path());
         let mut reader = Reader::from_path(entry.path()).expect("Unable to open reader");
 
         for wrapped_point in reader.points() {
