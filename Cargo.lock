@@ -2870,6 +2870,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "332cd62e95873ea4f41f3dfd6bbbfc5b52aec892d7e8d534197c4720a0bbbab2"
 
 [[package]]
+name = "quantiles"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c10fa813fb26fb6c321a6f3085b5ade4cb4730d08d0b9e70a3759136940957f2"
+
+[[package]]
 name = "quantogram"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3052,6 +3058,7 @@ dependencies = [
  "medians",
  "png",
  "postcard",
+ "quantiles",
  "quantogram",
  "serde",
  "stl_io",

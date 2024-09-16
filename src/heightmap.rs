@@ -2,7 +2,7 @@ use crate::las_data::Limits;
 use fastblur::gaussian_blur_asymmetric_single_channel;
 use itertools::iproduct;
 use log::info;
-use quantogram::Quantogram;
+use quantiles::ckms::CKMS;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::BufWriter;
@@ -191,7 +191,7 @@ impl Heightmap<f64> {
 }
 
 pub struct StreamingHeightmap {
-    grid_zones: Vec<Quantogram>,
+    grid_zones: Vec<CKMS<f64>>,
     grid_x: usize,
     grid_y: usize,
     ext_x: usize,
@@ -209,7 +209,7 @@ impl StreamingHeightmap {
         let ext_x = grid_x + 1;
         let ext_y = grid_y + 1;
         let mut grid_zones = Vec::new();
-        grid_zones.resize_with(ext_x * ext_y, || Quantogram::new());
+        grid_zones.resize_with(ext_x * ext_y, || CKMS::new(0.02));
         Self {
             grid_x,
             grid_y,
@@ -226,9 +226,8 @@ impl StreamingHeightmap {
         let y_ratio = (py - self.limits.min_y) / (self.limits.max_y - self.limits.min_y);
         let grid_x = (x_ratio * self.grid_x as f64).floor() as usize;
         let grid_y = (y_ratio * self.grid_y as f64).floor() as usize;
-
         let zone = &mut self.grid_zones[(grid_y * self.ext_x) + grid_x];
-        zone.add(pz);
+        zone.insert(pz);
     }
 
     pub fn finalize(&self) -> Heightmap<Option<f64>> {
@@ -237,7 +236,7 @@ impl StreamingHeightmap {
         let grid_zones: Vec<Option<f64>> = self
             .grid_zones
             .iter()
-            .map(|grid_zone| grid_zone.median())
+            .map(|grid_zone| grid_zone.query(0.5).map(|(_c, t)| t))
             .collect();
 
         info!("Summarized grid zones");
