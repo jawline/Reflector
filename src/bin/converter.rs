@@ -1,7 +1,7 @@
 use clap::Parser;
 use log::info;
-use rust_las_printer::heightmap::{las_data_to_opt_height_map, Heightmap};
-use rust_las_printer::las_data::LasData;
+use rust_las_printer::heightmap::{Heightmap, StreamingHeightmap};
+use rust_las_printer::las_data::{load_from_directory, Limits};
 use rust_las_printer::to_3d_model::Model;
 use rust_las_printer::to_stl::to_stl;
 use std::{
@@ -31,20 +31,20 @@ struct Args {
     #[arg(short, long, default_value_t = false)]
     max_y_is_low: bool,
 
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     write_to_bin: bool,
 
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     write_to_stl: bool,
 
     #[arg(short, long, default_value_t = 0.0)]
     base_depth: f64,
 
-    #[arg(short, long, default_value_t = 1.0)]
+    #[arg(long, default_value_t = 1.0)]
     scale_x: f64,
-    #[arg(short, long, default_value_t = 1.0)]
+    #[arg(long, default_value_t = 1.0)]
     scale_y: f64,
-    #[arg(short, long, default_value_t = 1.0)]
+    #[arg(long, default_value_t = 1.0)]
     scale_z: f64,
 }
 
@@ -53,21 +53,30 @@ fn main() {
 
     let args = Args::parse();
 
-    println!("Reading LAS files from: {}", args.las_folder_path);
-
-    let data = LasData::load_from_directory(
+    println!("First pass, collecting limits");
+    let limits = Limits::load_from_directory(
         &args.las_folder_path,
         (args.scale_x, args.scale_y, args.scale_z),
     );
 
     info!(
         "Bounds: {} {} {} {} {} {}",
-        data.min_x, data.max_x, data.min_y, data.max_y, data.min_z, data.max_z
+        limits.min_x, limits.max_x, limits.min_y, limits.max_y, limits.min_z, limits.max_z
     );
 
     println!("Main pass, summarizing grid squares");
 
-    let grid_zones = las_data_to_opt_height_map(&data, args.pixels_per_unit_dim);
+    let mut streamed = StreamingHeightmap::new(&limits, args.pixels_per_unit_dim);
+
+    load_from_directory(
+        &args.las_folder_path,
+        (args.scale_x, args.scale_y, args.scale_z),
+        |x, y, z| {
+            streamed.add((x, y, z));
+        },
+    );
+
+    let grid_zones = streamed.finalize();
 
     info!("Flipping the Y axis");
     let grid_zones = grid_zones.flip_y();

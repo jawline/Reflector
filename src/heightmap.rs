@@ -1,8 +1,8 @@
-use crate::las_data::LasData;
+use crate::las_data::Limits;
 use fastblur::gaussian_blur_asymmetric_single_channel;
 use itertools::iproduct;
 use log::info;
-use medians::Medianf64;
+use quantogram::Quantogram;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::BufWriter;
@@ -179,45 +179,69 @@ impl Heightmap<f64> {
     }
 }
 
-pub fn las_data_to_opt_height_map(
-    data: &LasData,
+pub struct StreamingHeightmap {
+    grid_zones: Vec<Quantogram>,
+    grid_x: usize,
+    grid_y: usize,
+    ext_x: usize,
+    ext_y: usize,
+    limits: Limits,
     pixels_per_distance_unit: f64,
-) -> Heightmap<Option<f64>> {
-    let grid_x = ((data.max_x - data.min_x) * pixels_per_distance_unit).ceil() as usize;
-    let grid_y = ((data.max_y - data.min_y) * pixels_per_distance_unit).ceil() as usize;
-    let ext_x = grid_x + 1;
-    let ext_y = grid_y + 1;
+}
 
-    info!("Derived GRID_X: {}, Derived GRID_Y: {}", grid_x, grid_y);
+impl StreamingHeightmap {
+    pub fn new(limits: &Limits, pixels_per_distance_unit: f64) -> Self {
+        let grid_x = ((limits.max_x - limits.min_x) * pixels_per_distance_unit).ceil() as usize;
+        let grid_y = ((limits.max_y - limits.min_y) * pixels_per_distance_unit).ceil() as usize;
+        info!("Derived GRID_X: {}, Derived GRID_Y: {}", grid_x, grid_y);
 
-    let mut grid_zones = Vec::new();
-    grid_zones.resize(ext_x * ext_y, Vec::new());
-
-    for (px, py, pz) in &data.points {
-        let x_ratio = (px - data.min_x) / (data.max_x - data.min_x);
-        let y_ratio = (py - data.min_y) / (data.max_y - data.min_y);
-        let grid_x = (x_ratio * grid_x as f64).floor() as usize;
-        let grid_y = (y_ratio * grid_y as f64).floor() as usize;
-
-        let zone = &mut grid_zones[(grid_y * ext_x) + grid_x];
-        zone.push(*pz);
+        let ext_x = grid_x + 1;
+        let ext_y = grid_y + 1;
+        let mut grid_zones = Vec::new();
+        grid_zones.resize_with(ext_x * ext_y, || Quantogram::new());
+        Self {
+            grid_x,
+            grid_y,
+            ext_x,
+            ext_y,
+            limits: limits.clone(),
+            grid_zones,
+            pixels_per_distance_unit,
+        }
     }
 
-    let grid_zones: Vec<Option<f64>> = grid_zones
-        .iter()
-        .map(|grid_zone| {
-            if grid_zone.is_empty() {
-                None
-            } else {
-                Some(grid_zone.median().unwrap())
-            }
-        })
-        .collect();
+    pub fn add(&mut self, (px, py, pz): (f64, f64, f64)) {
+        let x_ratio = (px - self.limits.min_x) / (self.limits.max_x - self.limits.min_x);
+        let y_ratio = (py - self.limits.min_y) / (self.limits.max_y - self.limits.min_y);
+        let grid_x = (x_ratio * self.grid_x as f64).floor() as usize;
+        let grid_y = (y_ratio * self.grid_y as f64).floor() as usize;
 
-    Heightmap {
-        data: grid_zones,
-        width: ext_x,
-        height: ext_y,
-        pixels_per_distance_unit,
+        let zone = &mut self.grid_zones[(grid_y * self.ext_x) + grid_x];
+        zone.add(pz);
+    }
+
+    pub fn finalize(&self) -> Heightmap<Option<f64>> {
+        info!("Constructed quantograms");
+
+        let grid_zones: Vec<Option<f64>> = self
+            .grid_zones
+            .iter()
+            .map(|grid_zone| {
+                if grid_zone.count() == 0 {
+                    None
+                } else {
+                    Some(grid_zone.median().unwrap())
+                }
+            })
+            .collect();
+
+        info!("Summarized grid zones");
+
+        Heightmap {
+            data: grid_zones,
+            width: self.ext_x,
+            height: self.ext_y,
+            pixels_per_distance_unit: self.pixels_per_distance_unit,
+        }
     }
 }
