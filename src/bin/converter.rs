@@ -49,6 +49,9 @@ struct Args {
     scale_y: f64,
     #[arg(long, default_value_t = 1.0)]
     scale_z: f64,
+
+    #[arg(long, default_value_t = 16)]
+    max_threads: usize,
 }
 
 fn main() {
@@ -60,6 +63,7 @@ fn main() {
     let limits = Limits::load_from_directory(
         &args.las_folder_path,
         (args.scale_x, args.scale_y, args.scale_z),
+        args.max_threads,
     );
 
     info!(
@@ -74,6 +78,7 @@ fn main() {
     load_from_directory(
         &args.las_folder_path,
         (args.scale_x, args.scale_y, args.scale_z),
+        args.max_threads,
         |x, y, z| {
             streamed.add((x, y, z));
         },
