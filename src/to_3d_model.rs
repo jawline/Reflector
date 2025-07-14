@@ -9,7 +9,7 @@ fn add_y_border(
     vertices: &mut Vec<[f32; 3]>,
     normals: &mut Vec<[f32; 3]>,
     uvs: &mut Vec<[f32; 2]>,
-    heightmap: &Heightmap<f64>,
+    heightmap: &Heightmap<f32>,
 ) -> usize {
     let offset = vertices.len();
 
@@ -32,7 +32,7 @@ fn add_x_border(
     vertices: &mut Vec<[f32; 3]>,
     normals: &mut Vec<[f32; 3]>,
     uvs: &mut Vec<[f32; 2]>,
-    heightmap: &Heightmap<f64>,
+    heightmap: &Heightmap<f32>,
 ) -> usize {
     let offset = vertices.len();
 
@@ -53,7 +53,7 @@ fn add_base(
     vertices: &mut Vec<[f32; 3]>,
     normals: &mut Vec<[f32; 3]>,
     uvs: &mut Vec<[f32; 2]>,
-    heightmap: &Heightmap<f64>,
+    heightmap: &Heightmap<f32>,
 ) -> usize {
     let offset = vertices.len();
 
@@ -87,7 +87,7 @@ fn compute_normal(
     (x2, y2): (usize, usize),
     (x3, y3): (usize, usize),
     vertices: &[[f32; 3]],
-    heightmap: &Heightmap<f64>,
+    heightmap: &Heightmap<f32>,
 ) -> Vec3 {
     let off1 = heightmap.offset((x1, y1));
     let off2 = heightmap.offset((x2, y2));
@@ -115,7 +115,7 @@ impl Model {
         }
     }
 
-    pub fn of_heightmap(heightmap: &Heightmap<f64>) -> Self {
+    pub fn of_heightmap(heightmap: &Heightmap<f32>) -> Self {
         let mut vertices = Vec::new();
         let mut uvs = Vec::new();
 
