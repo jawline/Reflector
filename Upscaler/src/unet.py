@@ -1,4 +1,4 @@
-from torch import nn
+from torch import nn, concat
 from embeddings import SinusoidalEmbeddings 
 from unet_layer import UnetLayer
 from typing import List
@@ -43,5 +43,5 @@ class UNET(nn.Module):
             residuals.append(r)
         for i in range(self.num_layers//2, self.num_layers):
             layer = getattr(self, f'Layer{i+1}')
-            x = torch.concat((layer(x, embeddings)[0], residuals[self.num_layers-i-1]), dim=1)
+            x = concat((layer(x, embeddings)[0], residuals[self.num_layers-i-1]), dim=1)
         return self.output_conv(self.relu(self.late_conv(x)))

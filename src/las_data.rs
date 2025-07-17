@@ -24,7 +24,10 @@ pub fn load_from_directory<F>(
         .into_iter()
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_file())
-        .filter(|e| e.path().extension() == Some(&OsStr::new("las")))
+        .filter(|e| {
+            e.path().extension() == Some(&OsStr::new("laz"))
+                || e.path().extension() == Some(&OsStr::new("las"))
+        })
     {
         let sender = sender.clone();
         pool.execute(move || {
@@ -73,6 +76,7 @@ impl Limits {
         let mut min_z: Option<f32> = None;
         let mut max_y: Option<f32> = None;
         let mut min_y: Option<f32> = None;
+        println!("{}", path);
         load_from_directory(path, scalers, max_threads, |x, y, z| {
             max_x = Some(max_x.unwrap_or(x).max(x));
             max_y = Some(max_y.unwrap_or(y).max(y));

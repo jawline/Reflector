@@ -123,8 +123,7 @@ impl Heightmap<Option<f32>> {
     }
 
     pub fn max_z(&self) -> f32 {
-        self
-            .data
+        self.data
             .iter()
             .filter_map(|x| *x)
             .max_by(|a, b| a.total_cmp(b))
