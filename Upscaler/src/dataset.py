@@ -6,7 +6,7 @@ from math import floor, isnan
 from random import Random
 
 class TerrainDataset(Dataset):
-    def __init__(self, samples_dir, samples_per_item=64, sample_x=32, sample_y=32):
+    def __init__(self, samples_dir, samples_per_item=256, sample_x=64, sample_y=64):
         self.samples_per_item = samples_per_item
         self.sample_x = sample_x
         self.sample_y = sample_y

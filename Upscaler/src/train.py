@@ -29,7 +29,7 @@ def train(dataset,
           checkpoint_path: str=None):
     set_seed(random.randint(0, 2**32-1)) if seed == -1 else set_seed(seed)
 
-    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=1)
+    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=4, prefetch_factor=2)
 
     scheduler = DDPM_Scheduler(num_time_steps=num_time_steps)
     model = UNET()
