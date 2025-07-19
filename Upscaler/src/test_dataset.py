@@ -3,6 +3,8 @@ from math import isnan
 import matplotlib.pyplot as plt
 import numpy as np
 import sys
+from time import sleep
+from plttool import wait_for_key_press
 
 dataset = sys.argv[-1]
 print(dataset)
@@ -12,7 +14,8 @@ print("Length", len(dataset))
 
 print("Checking NaNs")
 for i, el in enumerate(dataset):
-    without_nan = dataset[0]['without_nan']
+    print("Next elt")
+    without_nan = dataset[0]["without_nan"][0]
     for y in without_nan:
         for x in y:
             if isnan(x):
@@ -21,23 +24,11 @@ print("Done, no NaNs")
 
 fig = plt.figure()
 
-closed = False
 
-def handle_close(evt):
-    global closed
-    closed = True
-
-def waitforbuttonpress():
-    while plt.waitforbuttonpress(0.2) is None:
-        if closed:
-            return False
-    return True
-
-fig.canvas.mpl_connect('close_event', handle_close)
+fig.canvas.mpl_connect("close_event", handle_close)
 for i, el in enumerate(dataset):
-    plt.imshow(el['without_nan'])
-    plt.draw()
-    waitforbuttonpress()
-    plt.imshow(el['mask'])
-    plt.draw()
-    waitforbuttonpress()
+    image, mask = el["without_nan"][0], el["mask"][0]
+    fig, ax = plt.subplot_mosaic([["image", "mask"]], figsize=(7, 7))
+    ax["image"].imshow(image, vmin=0, vmax=1)
+    ax["mask"].imshow(mask, vmin=0, vmax=1)
+    plt.show()
