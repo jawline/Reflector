@@ -99,8 +99,9 @@ fn main() {
 
     if args.write_to_upscale_fmt {
         let file = File::create(args.output_path).unwrap();
+        let min_z = grid_zones.min_z();
         let max_z = grid_zones.max_z();
-        let grid_zones = grid_zones.normalize_z_by(max_z);
+        let grid_zones = grid_zones.normalize_z_by(min_z, max_z);
         grid_zones.serialize(file).unwrap();
     } else {
         info!("Doing hole filling");

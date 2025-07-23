@@ -8,7 +8,7 @@ def handle_close(evt):
     closed = True
 
 
-def waitforbuttonpress():
+def wait_for_key_press():
     closed = False
     while plt.waitforbuttonpress(0.2) is None:
         if closed:

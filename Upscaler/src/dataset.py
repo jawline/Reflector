@@ -1,7 +1,7 @@
 from torch import tensor, logical_not, load
 from torch.utils.data import Dataset
 from glob import glob
-from sample_loader import load_sample
+from sample_loader import load_sample, tell_width_height
 from math import floor, isnan
 from random import Random
 
@@ -13,7 +13,13 @@ class TerrainDatasetSlow(Dataset):
         self.samples_per_item = samples_per_item
         self.sample_x = sample_x
         self.sample_y = sample_y
-        self.files = glob(f"{samples_dir}/*.h3t")
+        files = glob(f"{samples_dir}/*.h3t")
+        final_files = []
+        for file in files:
+            width, height = tell_width_height(file)
+            if width > sample_x and height > sample_y:
+                final_files.append(file)
+        self.files = final_files
 
     def __len__(self):
         return len(self.files) * self.samples_per_item
@@ -67,4 +73,5 @@ class TerrainDataset(Dataset):
         return len(self.files)
 
     def __getitem__(self, idx):
-        return load(self.files[idx])
+        result = load(self.files[idx])
+        return result

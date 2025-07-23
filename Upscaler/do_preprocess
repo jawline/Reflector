@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -euvx
+python3 ./src/preprocess_samples.py ~/Downloads/terrain_examples ~/Downloads/terrain_examples_preprocessed

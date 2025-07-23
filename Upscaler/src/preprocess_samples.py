@@ -2,6 +2,7 @@ import sys
 import torch
 from tqdm import tqdm
 from dataset import TerrainDatasetSlow
+from torch.utils.data import DataLoader
 
 
 def main():
@@ -16,6 +17,15 @@ def main():
         device = torch.device("mps")
 
     dataset = TerrainDatasetSlow(from_)
+
+    dataset = DataLoader(
+        dataset,
+        batch_size=1,
+        shuffle=False,
+        drop_last=False,
+        num_workers=8,
+        prefetch_factor=16,
+    )
 
     for i, element in tqdm(enumerate(dataset)):
         torch.save(element, f"{to_}/{i}.pt")

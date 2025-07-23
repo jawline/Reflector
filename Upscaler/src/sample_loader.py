@@ -2,7 +2,18 @@ from math import nan, isnan, isnan
 from array import array
 from struct import pack, unpack
 from functools import partial
-from torch import tensor
+from torch import tensor, FloatTensor
+
+
+def tell_width_height(file):
+    with open(file, "rb") as file:
+        header = file.read(8)
+        if len(header) != 8:
+            raise "Error: File too short, could not extract header"
+        width, height, scale_z = unpack("<hhf", header)
+        for record in iter(partial(file.read, 4), b""):
+            values = unpack("<f", record)
+        return width, height
 
 
 class Sample:
@@ -30,7 +41,8 @@ class Sample:
                 row.append(elt)
             out.append(row)
 
-        return tensor(out).reshape((1, width, height))
+        result = FloatTensor(out).reshape((1, width, height))
+        return result
 
 
 def load_sample(file):
@@ -50,5 +62,11 @@ def load_sample(file):
         raise Exception(
             f"Error: width and height don't match size of file {width} {height} {scale_z} {data_len}"
         )
+
+    for elt in data:
+        if elt < 0.0:
+            raise Exception("data does not look normalized")
+        if elt > 1.0:
+            raise Exception("data does not look normalized")
 
     return Sample(width, height, scale_z, data)

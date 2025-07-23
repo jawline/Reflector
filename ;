@@ -1,0 +1,96 @@
+import torch
+import model_loader
+import matplotlib.pyplot as plt
+from typing import List
+from timm.utils import ModelEmaV3
+from unet import UNET
+from ddpm_scheduler import DDPM_Scheduler
+from einops import rearrange
+from tqdm import tqdm
+
+
+def display_reverse(images: List):
+    fig, axes = plt.subplots(1, len(images), figsize=(10, 1))
+    for i, ax in enumerate(axes.flat):
+        x = images[i].squeeze(0)
+        x = rearrange(x, "c h w -> h w c")
+        x = x.numpy()
+        ax.imshow(x)
+        ax.axis("off")
+    plt.show()
+
+
+def prepare_model(device, checkpoint_path, ema_decay, num_time_steps):
+    scheduler, model, optimizer, ema = model_loader.load(
+        device, checkpoint_path, ema_decay, num_time_steps, lr=0.1
+    )
+    return ema, scheduler
+
+
+def step(device, frame, model, scheduler, step):
+    t = [step]
+    temp = (scheduler.beta[t] / (
+        (torch.sqrt(1 - scheduler.alpha[t])) * (torch.sqrt(1 - scheduler.beta[t]))
+    )).to(device)
+    # The third argument to model is a mask which is ignored with no_grad
+    beta = ((1 / (torch.sqrt(1 - scheduler.beta[t])))).to(device)
+    next_frame = beta * frame - (temp * model(frame, t, frame))
+    return next_frame
+
+
+def infer_frame(
+    device, src_frame, src_mask, model, scheduler, num_time_steps, sample_times
+):
+    images = []
+    masked_src_frame = torch.randn(1, 1, 64, 64).to(device) * (torch.logical_not(src_mask)).to(device)
+    images.append(masked_src_frame.to("cpu"))
+
+    for which_step in tqdm(
+        reversed(range(1, num_time_steps)), desc=f"Infer Step {num_time_steps}"
+    ):
+        next_frame = step(device, masked_src_frame, model, scheduler, which_step)
+        if which_step in sample_times:
+            images.append(masked_src_frame.to("cpu"))
+        e = torch.randn(1, 1, 64, 64).to(device)
+        beta = torch.sqrt(scheduler.beta[[which_step]]).to(device)
+        next_frame = next_frame + (e * beta)
+        masked_src_frame = next_frame
+
+    masked_src_frame = step(device, masked_src_frame.to(device), model, scheduler, 0)
+
+    final_frame = src_frame + (masked_src_frame * torch.logical_not(src_mask))
+
+    images.append(final_frame.to("cpu"))
+    return images
+
+def masked_inference(dataset,
+    device=None, 
+    checkpoint_path: str = None,
+    num_time_steps: int = 1000,
+    ema_decay: float = 0.9999): 
+    ema, scheduler = prepare_model(device, checkpoint_path, ema_decay, num_time_steps)
+    times = [0, 500] 
+    with torch.no_grad():
+        model = ema.module.eval()
+        datapoint = dataset[0]
+        src_frame = datapoint["without_nan"].to(device)
+        src_mask = datapoint["mask"].to(device)
+        images = infer_frame(device, src_frame, src_mask, model, scheduler, num_time_steps, times)
+        display_reverse(images)
+
+
+def generative_inference(
+    device=None,
+    checkpoint_path: str = None,
+    num_time_steps: int = 1000,
+    ema_decay: float = 0.9999,
+):
+    ema, scheduler = prepare_model(device, checkpoint_path, ema_decay, num_time_steps)
+    times = [0, 500]
+
+    with torch.no_grad():
+        model = ema.module.eval()
+        for i in range(10):
+            z = torch.randn(1, 1, 64, 64)
+            images = infer_frame(device, z, z, model, scheduler, num_time_steps, times)
+            display_reverse(images)

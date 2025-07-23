@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euvx
+echo "Doing $1 to $2"
+
+for file in "$1"/*; do
+  base="$(basename "$file")"
+  to_name="$2/$base.h3t"
+  echo "Processing $file to $to_name ($base)"
+  RUST_LOG=info cargo run --release --bin converter -- --las-folder-path "$file" --output-path "$to_name" --pixels-per-unit-dim 3 --scale-x 0.1 --scale-y 0.1 --scale-z 0.1 --write-to-upscale-fmt    
+done
