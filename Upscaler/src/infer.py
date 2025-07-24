@@ -8,7 +8,7 @@ from unet import UNET
 from ddpm_scheduler import DDPM_Scheduler
 from einops import rearrange
 from tqdm import tqdm
-from torch import logical_not
+from torch import no_grad, logical_not, randn, randn_like, sqrt, sum
 
 
 def display_reverse(images: List):
@@ -30,19 +30,14 @@ def prepare_model(device, checkpoint_path, ema_decay, num_time_steps):
 
 
 def step(device, frame, model, scheduler, step):
-    t = [step]
-    temp = (
-        scheduler.beta[t]
-        / ((torch.sqrt(1 - scheduler.alpha[t])) * (torch.sqrt(1 - scheduler.beta[t])))
-    ).to(device)
     # The third argument to model is a mask which is ignored with no_grad
-    beta = (1 / (torch.sqrt(1 - scheduler.beta[t]))).to(device)
-    next_frame = beta * frame - (temp * model(frame, t, frame))
-    return next_frame
+    predicted_noise = model(frame, [step], frame)
+    return scheduler.denoise_from(device, frame, predicted_noise, step)
 
 
 def infer_noise_mask(device, scheduler, src_frame, src_mask, step):
-    return scheduler.noise_frame(device, src_frame, [step]) * src_mask
+    noised_frame, _random_data = scheduler.noise_frame(device, src_frame, [step])
+    return noised_frame * src_mask
 
 
 def combine_with_src_frame(src_frame, src_mask, frame):
@@ -61,13 +56,13 @@ def infer_frame(
 
     guess_mask = (logical_not(src_mask)).to(device)
     masked_src_frame = (src_frame * src_mask) + (
-        torch.randn(1, 1, 64, 64).to(device) * guess_mask
+        randn_like(src_frame).to(device) * guess_mask
     )
 
     images.append(masked_src_frame.to("cpu"))
 
     for which_step in tqdm(
-        reversed(range(1, num_time_steps)), desc=f"Infer Step {num_time_steps}"
+        reversed(range(0, num_time_steps)), desc=f"Infer Step {num_time_steps}"
     ):
         masked_src_frame = combine_with_src_frame(
             infer_noise_mask(device, scheduler, src_frame, src_mask, which_step),
@@ -75,9 +70,17 @@ def infer_frame(
             masked_src_frame,
         )
         masked_src_frame = step(device, masked_src_frame, model, scheduler, which_step)
-        e = torch.randn(1, 1, 64, 64).to(device)
-        beta = torch.sqrt(scheduler.beta[[which_step]]).to(device)
-        masked_src_frame = masked_src_frame + (e * beta)
+
+        # This might not be necessary, but per the article I constructed this from
+        # "For example, estimating and subtracting the total amount of noise in the beginning
+        # of the iterative process all at once leads to very incoherent samples, so in practice
+        # adding a bit of the noise back and iterating through every time step has empirically
+        # been shown to generate better samples."
+        if which_step != 0:
+            e = randn_like(src_frame).to(device)
+            beta = sqrt(scheduler.beta[[which_step]]).to(device)
+            masked_src_frame = masked_src_frame + (e * beta)
+
         masked_src_frame = (masked_src_frame * guess_mask) + (src_frame * src_mask)
         if which_step in sample_times:
             images.append(masked_src_frame.to("cpu"))
@@ -98,7 +101,7 @@ def masked_inference(
 ):
     ema, scheduler = prepare_model(device, checkpoint_path, ema_decay, num_time_steps)
     times = []
-    with torch.no_grad():
+    with no_grad():
         while True:
             model = ema.module.eval()
             datapoint = random.choice(dataset)
@@ -107,7 +110,7 @@ def masked_inference(
             src_mask = datapoint["mask"]
 
             # Skip a candidate if it has a lot of data
-            if torch.sum(src_mask) > 3686:
+            if sum(src_mask) > 3686:
                 print("Skip candidate, too nice")
                 continue
 
@@ -126,10 +129,10 @@ def generative_inference(
     ema, scheduler = prepare_model(device, checkpoint_path, ema_decay, num_time_steps)
     times = []
 
-    with torch.no_grad():
+    with no_grad():
         model = ema.module.eval()
         for i in range(10):
-            z = torch.rand(1, 1, 64, 64)
+            z = randn(1, 1, 64, 64)
             images = infer_frame(
                 device, z, z < 0.1, model, scheduler, num_time_steps, times
             )

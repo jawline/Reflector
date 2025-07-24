@@ -8,11 +8,21 @@ from infer import masked_inference
 def main():
     print("Torch version", torch.__version__)
 
-    mode = sys.argv[-3]
-    dataset = sys.argv[-2]
-    checkpoint = sys.argv[-1]
+    if len(sys.argv) == 4:
+        print("Running with existing model")
+        mode = sys.argv[-3]
+        dataset = sys.argv[-2]
+        checkpoint = sys.argv[-1]
+    elif len(sys.argv) == 3:
+        print("Running without pre-existing model")
+        mode = sys.argv[-2]
+        dataset = sys.argv[-1]
+        checkpoint = None
+    else:
+        raise Exception("unknown arguments")
 
     device = torch.device("cpu")
+
     if torch.backends.mps.is_available():
         print("Apple Silicon acceleration possible")
         device = torch.device("mps")
@@ -21,10 +31,10 @@ def main():
         print("CUDA acceleration is possible")
         device = torch.device("cuda")
 
+    print("Loading", dataset)
     dataset = TerrainDataset(dataset)
 
     if mode == "train":
-        print("Loading", dataset)
         train(
             dataset, checkpoint_path=checkpoint, lr=2e-5, num_epochs=75, device=device
         )

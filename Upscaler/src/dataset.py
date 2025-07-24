@@ -9,7 +9,7 @@ from random import Random
 # Dataset for candidate selection, used to preprocess actual samples out of larger files by preprocess_samples
 # Expensive, so best to preprocess and then used pre serialized samples
 class TerrainDatasetSlow(Dataset):
-    def __init__(self, samples_dir, samples_per_item=256, sample_x=64, sample_y=64):
+    def __init__(self, samples_dir, samples_per_item=256, sample_x=128, sample_y=128):
         self.samples_per_item = samples_per_item
         self.sample_x = sample_x
         self.sample_y = sample_y
@@ -28,7 +28,7 @@ class TerrainDatasetSlow(Dataset):
         start_x = rand.randint(0, sample.width - self.sample_x)
         start_y = rand.randint(0, sample.height - self.sample_y)
         with_nan = sample.tensor(start_x, start_y, self.sample_x, self.sample_y)
-        mask = tensor([[isnan(x) for x in row] for row in with_nan[0]]).reshape(
+        mask = tensor([[isnan(x) for x in row] for row in with_nan]).reshape(
             with_nan.shape
         )
         mask = logical_not(mask)
@@ -40,8 +40,8 @@ class TerrainDatasetSlow(Dataset):
     def reject_candidate(self, mask):
         num_nans = 0
         elts = 0
-        for _, row in enumerate(mask[0]):
-            for _, val in enumerate(row):
+        for row in mask:
+            for val in row:
                 num_nans += int(not val)
                 elts += 1
         ratio_of_nans = num_nans / elts
@@ -66,7 +66,7 @@ class TerrainDatasetSlow(Dataset):
 
 
 class TerrainDataset(Dataset):
-    def __init__(self, samples_dir, samples_per_item=256, sample_x=64, sample_y=64):
+    def __init__(self, samples_dir):
         self.files = glob(f"{samples_dir}/*.pt")
 
     def __len__(self):

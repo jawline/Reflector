@@ -41,7 +41,7 @@ class Sample:
                 row.append(elt)
             out.append(row)
 
-        result = FloatTensor(out).reshape((1, width, height))
+        result = FloatTensor(out).reshape((width, height))
         return result
 
 

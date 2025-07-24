@@ -22,7 +22,7 @@ def set_seed(seed: int = 42):
     random.seed(seed)
 
 
-def dataloader(dataset):
+def dataloader(dataset, batch_size):
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -35,7 +35,7 @@ def dataloader(dataset):
 
 def train(
     dataset,
-    batch_size: int = 1,
+    batch_size: int = 8,
     num_time_steps: int = 50,
     num_epochs: int = 150,
     seed: int = -1,
@@ -45,10 +45,8 @@ def train(
     device=None,
 ):
     set_seed(random.randint(0, 2**32 - 1)) if seed == -1 else set_seed(seed)
-    train_loader = dataload(dataset)
-    scheduler, model, optimizer, ema = model_loader.create(ema_decay)
-    if checkpoint_path is not None:
-        scheduler, model, optimizer, ema = model_loader.load(checkpoint_path, ema_decay)
+    train_loader = dataloader(dataset, batch_size)
+    scheduler, model, optimizer, ema = model_loader.load(device, checkpoint_path, ema_decay, num_time_steps, lr)
 
     criterion = nn.MSELoss(reduction="mean")
 
@@ -59,10 +57,10 @@ def train(
             for_train = datapoint["without_nan"].to(device)
             mask = datapoint["mask"].to(device)
             steps = torch.randint(0, num_time_steps, (batch_size,))
-            for_train = scheduler.noise_frame(device, for_train, steps)
-            output = model(for_train, t, mask).contiguous()
+            for_train, random_data = scheduler.noise_frame(device, for_train, steps)
+            output = model(for_train, steps, mask)
             optimizer.zero_grad()
-            loss = criterion(output, e)
+            loss = criterion(output, random_data)
             total_loss += loss.item()
             loss.backward()
             optimizer.step()

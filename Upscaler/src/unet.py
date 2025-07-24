@@ -9,7 +9,7 @@ class UNET(nn.Module):
     def __init__(
         self,
         Channels: List = [64, 128, 256, 512, 512, 384],
-        Attentions: List = [False, True, True, True, True, False],
+        Attentions: List = [False, True, True, False, False, False],
         Upscales: List = [False, False, False, True, True, True],
         num_groups: int = 32,
         dropout_prob: float = 0.1,
