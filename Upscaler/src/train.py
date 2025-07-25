@@ -3,13 +3,13 @@ import numpy as np
 import torch
 import model_loader
 from math import isnan
-from torch import nn, tensor, masked_select
+from torch import nn, tensor, masked_select, randint, save
+from torch.nn.functional import pad, interpolate
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from ddpm_scheduler import DDPM_Scheduler
 from unet import UNET
 from tqdm import tqdm
-from torch.nn.functional import pad, interpolate
 from masked_grad import MaskedGrad
 
 
@@ -46,7 +46,9 @@ def train(
 ):
     set_seed(random.randint(0, 2**32 - 1)) if seed == -1 else set_seed(seed)
     train_loader = dataloader(dataset, batch_size)
-    scheduler, model, optimizer, ema = model_loader.load(device, checkpoint_path, ema_decay, num_time_steps, lr)
+    scheduler, model, optimizer, ema = model_loader.load(
+        device, checkpoint_path, ema_decay, num_time_steps, lr
+    )
 
     criterion = nn.MSELoss(reduction="mean")
 
@@ -56,7 +58,7 @@ def train(
         for bidx, datapoint in enumerate(entries):
             for_train = datapoint["without_nan"].to(device)
             mask = datapoint["mask"].to(device)
-            steps = torch.randint(0, num_time_steps, (batch_size,))
+            steps = randint(0, num_time_steps, (batch_size,))
             for_train, random_data = scheduler.noise_frame(device, for_train, steps)
             output = model(for_train, steps, mask)
             optimizer.zero_grad()
@@ -75,5 +77,5 @@ def train(
     }
 
     print("Saving checkpoint")
-    torch.save(checkpoint, "checkpoints/ddpm_checkpoint")
+    save(checkpoint, "checkpoints/ddpm_checkpoint")
     print("Saved checkpoint")

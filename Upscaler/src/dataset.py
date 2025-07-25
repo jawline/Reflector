@@ -5,6 +5,7 @@ from sample_loader import load_sample, tell_width_height
 from math import floor, isnan
 from random import Random
 
+max_attempts = 100
 
 # Dataset for candidate selection, used to preprocess actual samples out of larger files by preprocess_samples
 # Expensive, so best to preprocess and then used pre serialized samples
@@ -54,10 +55,14 @@ class TerrainDatasetSlow(Dataset):
         with_nan = None
         without_nan = None
         mask = None
+        attempts = 0
         while True:
             with_nan, without_nan, mask = self.candidate(rand, sample)
             if not self.reject_candidate(mask):
                 break
+            attempts += 1
+            if attempts > max_attempts:
+                raise Exception(f"Could not find a good candidate in sample {self.files[idx]}")
 
         return {
             "mask": mask,

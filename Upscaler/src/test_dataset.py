@@ -14,7 +14,7 @@ dataset = TerrainDataset(dataset)
 print("Length", len(dataset))
 
 print("Checking NaNs")
- for i, el in tqdm(enumerate(dataset)):
+for i, el in tqdm(enumerate(dataset)):
     without_nan = dataset[0]["without_nan"]
     for y in without_nan:
         for x in y:

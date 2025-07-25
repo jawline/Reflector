@@ -77,8 +77,9 @@ def infer_frame(
         # adding a bit of the noise back and iterating through every time step has empirically
         # been shown to generate better samples."
         if which_step != 0:
+            # TODO: which_step or which_step - 1
             e = randn_like(src_frame).to(device)
-            beta = sqrt(scheduler.beta[[which_step]]).to(device)
+            beta = sqrt(scheduler.beta[[which_step - 1]]).to(device)
             masked_src_frame = masked_src_frame + (e * beta)
 
         masked_src_frame = (masked_src_frame * guess_mask) + (src_frame * src_mask)
@@ -110,13 +111,14 @@ def masked_inference(
             src_mask = datapoint["mask"]
 
             # Skip a candidate if it has a lot of data
-            if sum(src_mask) > 3686:
+            if sum(src_mask) > 3891:
                 print("Skip candidate, too nice")
                 continue
 
             images = infer_frame(
                 device, src_frame, src_mask, model, scheduler, num_time_steps, times
             )
+
             display_reverse(images)
 
 
@@ -132,8 +134,9 @@ def generative_inference(
     with no_grad():
         model = ema.module.eval()
         for i in range(10):
-            z = randn(1, 1, 64, 64)
+            z = randn(1, 1, 128, 128)
+            mask = tensor([False]).repeat(z.shape)
             images = infer_frame(
-                device, z, z < 0.1, model, scheduler, num_time_steps, times
+                device, z, mask, model, scheduler, num_time_steps, times
             )
             display_reverse(images)

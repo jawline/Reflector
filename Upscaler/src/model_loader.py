@@ -15,9 +15,13 @@ def create(device, ema_decay, num_time_steps, lr):
 
 def load(device, file, ema_decay, num_time_steps, lr):
     scheduler, model, optimizer, ema = create(device, ema_decay, num_time_steps, lr)
-    if file is not None:
-        checkpoint = torch.load(file, map_location=device)
-        model.load_state_dict(checkpoint["weights"])
-        ema.load_state_dict(checkpoint["ema"])
-        optimizer.load_state_dict(checkpoint["optimizer"])
+    try:
+        if file is not None:
+            checkpoint = torch.load(file, map_location=device)
+            model.load_state_dict(checkpoint["weights"])
+            ema.load_state_dict(checkpoint["ema"])
+            optimizer.load_state_dict(checkpoint["optimizer"])
+    except:
+        print("Could not load checkpoint")
+
     return scheduler, model, optimizer, ema

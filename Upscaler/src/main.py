@@ -2,24 +2,15 @@ import sys
 import torch
 from train import train
 from dataset import TerrainDataset
-from infer import masked_inference
+from infer import masked_inference, generative_inference
 
 
 def main():
     print("Torch version", torch.__version__)
 
-    if len(sys.argv) == 4:
-        print("Running with existing model")
-        mode = sys.argv[-3]
-        dataset = sys.argv[-2]
-        checkpoint = sys.argv[-1]
-    elif len(sys.argv) == 3:
-        print("Running without pre-existing model")
-        mode = sys.argv[-2]
-        dataset = sys.argv[-1]
-        checkpoint = None
-    else:
-        raise Exception("unknown arguments")
+    mode = sys.argv[-3]
+    dataset = sys.argv[-2]
+    checkpoint = sys.argv[-1]
 
     device = torch.device("cpu")
 
@@ -35,12 +26,16 @@ def main():
     dataset = TerrainDataset(dataset)
 
     if mode == "train":
+        print("Starting training")
         train(
             dataset, checkpoint_path=checkpoint, lr=2e-5, num_epochs=75, device=device
         )
     elif mode == "infer":
         print("Starting inference")
         masked_inference(dataset, device=device, checkpoint_path=checkpoint)
+    elif mode == "generate":
+        print("Starting generative inference")
+        generative_inference(device=device, checkpoint_path=checkpoint)
 
 
 if __name__ == "__main__":
