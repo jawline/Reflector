@@ -11,6 +11,7 @@ from ddpm_scheduler import DDPM_Scheduler
 from unet import UNET
 from tqdm import tqdm
 from masked_grad import MaskedGrad
+from constants import num_time_steps
 
 
 def set_seed(seed: int = 42):
@@ -36,7 +37,7 @@ def dataloader(dataset, batch_size):
 def train(
     dataset,
     batch_size: int = 8,
-    num_time_steps: int = 50,
+    num_time_steps: int = num_time_steps,
     num_epochs: int = 150,
     seed: int = -1,
     ema_decay: float = 0.9999,

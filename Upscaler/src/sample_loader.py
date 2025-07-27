@@ -28,7 +28,7 @@ class Sample:
         for elt in self.data:
             print(elt)
 
-    def tensor(self, x, y, width, height, replace_nan_with=nan):
+    def tensor(self, x, y, width, height):
         out = []
         for ly in range(y, y + height):
             row = []
@@ -36,8 +36,6 @@ class Sample:
                 elt = nan
                 if ly < self.height and lx < self.width:
                     elt = self.data[(ly * self.width) + lx]
-                if isnan(elt):
-                    elt = replace_nan_with
                 row.append(elt)
             out.append(row)
 
@@ -64,9 +62,21 @@ def load_sample(file):
         )
 
     for elt in data:
-        if elt < 0.0:
-            raise Exception("data does not look normalized")
-        if elt > 1.0:
+        if elt < 0.0 or elt > 1.0:
             raise Exception("data does not look normalized")
 
     return Sample(width, height, scale_z, data)
+
+
+def replace_nan_with_zero(x):
+    if isnan(x):
+        return 0
+    return x
+
+
+def prepare_tensor(sample_tensor):
+    mask = tensor([[not isnan(x) for x in row] for row in with_nan]).reshape(
+        sample_tensor.shape
+    )
+    without_nan = sample_tensor.apply_(replace_nan_with_zero)
+    return without_nan, mask

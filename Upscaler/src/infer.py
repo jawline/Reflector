@@ -11,6 +11,7 @@ from ddpm_scheduler import DDPM_Scheduler
 from einops import rearrange
 from tqdm import tqdm
 from torch import no_grad, logical_not, randn, randn_like, sqrt, sum
+from constants import num_time_steps
 
 
 def display_reverse(images: List):
@@ -99,7 +100,7 @@ def masked_inference(
     dataset,
     device=None,
     checkpoint_path: str = None,
-    num_time_steps: int = 50,
+    num_time_steps: int = num_time_steps,
     ema_decay: float = 0.9999,
 ):
     ema, scheduler = prepare_model(device, checkpoint_path, ema_decay, num_time_steps)
@@ -127,7 +128,7 @@ def masked_inference(
 def generative_inference(
     device=None,
     checkpoint_path: str = None,
-    num_time_steps: int = 1000,
+    num_time_steps: int = num_time_steps,
     ema_decay: float = 0.9999,
 ):
     ema, scheduler = prepare_model(device, checkpoint_path, ema_decay, num_time_steps)
@@ -215,7 +216,7 @@ def whole_datasource_tiled_inference(
     kernel_height,
     device=None,
     checkpoint_path: str = None,
-    num_time_steps: int = 1000,
+    num_time_steps: int = num_time_steps,
     ema_decay: float = 0.9999,
 ):
     ema, scheduler = prepare_model(device, checkpoint_path, ema_decay, num_time_steps)
@@ -234,8 +235,11 @@ def whole_datasource_tiled_inference(
         for y_tile in range(tiles_y):
             print("Starting new row inference")
             x_tiles = array.array().extend(tiles_x)
+
             for x_tile in range(tiles_x):
                 print(f"Considering inference on tile x={x_tile} y={y_tile}")
+
+                # TODO: Rather than this we could combine all the images into a tensor and then use chunks
                 start_y = y_tile * kernel_height
                 end_y = (y_tile + 1) * kernel_height
                 start_x = x_tile * kernel_width
@@ -244,9 +248,11 @@ def whole_datasource_tiled_inference(
                 tile_data = (
                     src_frame[start_y:end_y][start_x:end_x].contiguous().to(device)
                 )
+
                 tile_mask = (
                     src_mask[start_y:end_y][start_x:end_x].contiguous().to(device)
                 )
+
                 keep_mask = (
                     keep_mask[start_y:end_y][start_x:end_x].contiguous().to(device)
                 )
@@ -263,6 +269,7 @@ def whole_datasource_tiled_inference(
 
                 if need_to_do_inference:
                     print(f"Inferring tile x={x_tile} y={y_tile}")
+
                     inference = infer_frame(
                         device,
                         tile_data,

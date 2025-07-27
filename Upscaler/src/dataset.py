@@ -1,9 +1,10 @@
 from torch import tensor, logical_not, load
 from torch.utils.data import Dataset
 from glob import glob
-from sample_loader import load_sample, tell_width_height
+from sample_loader import load_sample, tell_width_height, prepare_tensor
 from math import floor, isnan
 from random import Random
+
 
 max_attempts = 100
 
@@ -30,13 +31,7 @@ class TerrainDatasetSlow(Dataset):
         start_x = rand.randint(0, sample.width - self.sample_x)
         start_y = rand.randint(0, sample.height - self.sample_y)
         with_nan = sample.tensor(start_x, start_y, self.sample_x, self.sample_y)
-        mask = tensor([[isnan(x) for x in row] for row in with_nan]).reshape(
-            with_nan.shape
-        )
-        mask = logical_not(mask)
-        without_nan = sample.tensor(
-            start_x, start_y, self.sample_x, self.sample_y, replace_nan_with=0.0
-        )
+        without_nan, mask = prepare_tensor(with_nan)
         return with_nan, without_nan, mask
 
     def reject_candidate(self, mask):
