@@ -208,7 +208,7 @@ def compute_infill_keep_mask(src_mask):
     return logical_and(not (src_mask), compute_max_distance(src_mask) <= threshold)
 
 
-def generative_inference(
+def whole_datasource_tiled_inference(
     src_frame,
     src_mask,
     kernel_width,
@@ -221,6 +221,7 @@ def generative_inference(
     ema, scheduler = prepare_model(device, checkpoint_path, ema_decay, num_time_steps)
     model = ema.module.eval()
     times = []
+
     with no_grad():
         keep_mask = compute_infill_keep_mask(src_mask)
         tiles_y = ceil(src_frame.shape[0] / kernel_height)
@@ -239,14 +240,26 @@ def generative_inference(
                 end_y = (y_tile + 1) * kernel_height
                 start_x = x_tile * kernel_width
                 end_x = (x_tile + 1) * kernel_width
-                tile_data = src_frame[start_y:end_y][start_x:end_x].contiguous()
-                tile_mask = src_mask[start_y:end_y][start_x:end_x].contiguous()
-                keep_mask = keep_mask[start_y:end_y][start_x:end_x].contiguous()
+
+                tile_data = (
+                    src_frame[start_y:end_y][start_x:end_x].contiguous().to(device)
+                )
+                tile_mask = (
+                    src_mask[start_y:end_y][start_x:end_x].contiguous().to(device)
+                )
+                keep_mask = (
+                    keep_mask[start_y:end_y][start_x:end_x].contiguous().to(device)
+                )
 
                 new_tile = tile_data
 
-                tiles_that_dont_need_inference = logical_and(src_mask, logical_not(keep_mask))
-                need_to_do_inference = sum(tiles_that_dont_need_inference) != src_mask.flatten().shape[0]
+                tiles_that_dont_need_inference = logical_and(
+                    src_mask, logical_not(keep_mask)
+                )
+
+                need_to_do_inference = (
+                    sum(tiles_that_dont_need_inference) != src_mask.flatten().shape[0]
+                )
 
                 if need_to_do_inference:
                     print(f"Inferring tile x={x_tile} y={y_tile}")
@@ -262,10 +275,16 @@ def generative_inference(
 
                     # We use the keep mask here to avoid it damaging inference, since the values are None
                     # and do need prediction but we don't actually want to keep them in our result.
-                    new_tile = combine_with_src_frame(src_frame, logical_not(keep_mask), result)
+                    new_tile = combine_with_src_frame(
+                        src_frame, logical_not(keep_mask), result
+                    )
                 else:
                     print(f"Skipping tile x={x_tile} y={y_tile}")
                 x_tiles.append(new_tile)
-            y_tiles.append(cat(x_tiles, dim=1)
+
+            y_tiles.append(cat(x_tiles, dim=1))
+
         result = cat(y_tiles, dim=0)
+        display_reverse([result])
+
         return result
