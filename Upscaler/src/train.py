@@ -67,6 +67,7 @@ def train(
             loss.backward()
             optimizer.step()
             ema.update(model)
+            save(checkpoint, "checkpoints/ddpm_checkpoint")
         print(f"Epoch {i + 1} | Loss {total_loss / (60000 / batch_size):.5f}")
 
     print("Assembled checkpoint")

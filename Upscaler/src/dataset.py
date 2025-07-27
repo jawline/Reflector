@@ -7,6 +7,7 @@ from random import Random
 
 max_attempts = 100
 
+
 # Dataset for candidate selection, used to preprocess actual samples out of larger files by preprocess_samples
 # Expensive, so best to preprocess and then used pre serialized samples
 class TerrainDatasetSlow(Dataset):
@@ -62,7 +63,9 @@ class TerrainDatasetSlow(Dataset):
                 break
             attempts += 1
             if attempts > max_attempts:
-                raise Exception(f"Could not find a good candidate in sample {self.files[idx]}")
+                raise Exception(
+                    f"Could not find a good candidate in sample {self.files[idx]}"
+                )
 
         return {
             "mask": mask,
