@@ -4,10 +4,12 @@ use itertools::iproduct;
 use log::info;
 use quantiles::ckms::CKMS;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashSet, VecDeque};
 use std::fs::File;
 use std::io::BufWriter;
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 use std::path::Path;
+use bitvector::BitVector;
 
 #[derive(Serialize, Deserialize)]
 pub struct Heightmap<T: Clone + Copy> {
@@ -46,13 +48,235 @@ impl<T: Clone + Copy> Index<(usize, usize)> for Heightmap<T> {
     type Output = T;
 
     fn index(&self, (x, y): (usize, usize)) -> &Self::Output {
-        let idx = (y * self.width) + x;
+        let idx = self.offset((x, y));
         &self.data[idx]
     }
 }
 
+impl<T: Clone + Copy> IndexMut<(usize, usize)> for Heightmap<T> {
+    fn index_mut(&mut self, (x, y): (usize, usize)) -> &mut Self::Output {
+        let idx = self.offset((x, y));
+        &mut self.data[idx]
+    }
+}
+
+pub enum InterpolationMode {
+    Min,
+    Max,
+    Mean,
+    Percentile(f64),
+}
+
+pub fn mean(neighbors: &[f64]) -> Option<f64> {
+    let len = neighbors.len();
+    if len > 0 {
+        Some(neighbors.iter().sum::<f64>() / (len as f64))
+    } else {
+        None
+    }
+}
+
+pub fn median(neighbors: &[f64], percentile: f64) -> Option<f64> {
+    let mut neighbors: Vec<f64> = neighbors.to_vec();
+    neighbors.sort_by(|a, b| a.total_cmp(b));
+    if neighbors.len() > 0 {
+        let grid_elt = (neighbors.len() as f64 * percentile) as usize;
+        Some(neighbors[grid_elt])
+    } else {
+        None
+    }
+}
+
+pub fn min_elt(neighbors: &[f64]) -> Option<f64> {
+    neighbors.iter().min_by(|a, b| a.total_cmp(b)).copied()
+}
+
+pub fn max_elt(neighbors: &[f64]) -> Option<f64> {
+    neighbors.iter().max_by(|a, b| a.total_cmp(b)).copied()
+}
+
+#[derive(Debug)]
+struct VoidAndPerimeter {
+    void: Vec<(usize, usize)>,
+    perimeter: Vec<(usize, usize)>,
+}
+
+impl<T: Copy + Clone> Heightmap<Option<T>> {
+    fn expand_void(&self, x: usize, y: usize) -> VoidAndPerimeter {
+        let mut void = Vec::new();
+        let mut perimeter = Vec::new();
+
+        let mut seen = HashSet::new();
+        let mut worklist = VecDeque::new();
+
+        macro_rules! add {
+            ($l:expr) => {
+                match seen.contains(&$l) {
+                    true => (),
+                    false => {
+                        seen.insert($l);
+                        worklist.push_back($l);
+                    }
+                }
+            };
+        }
+
+        add!((x, y));
+
+        while let Some((x, y)) = worklist.pop_front() {
+            match self[(x, y)] {
+                Some(_) => perimeter.push((x, y)),
+                None =>
+                /* Void */
+                {
+                    void.push((x, y));
+                    let can_go_west = x > 0;
+                    let can_go_east = x < self.width - 1;
+                    let can_go_north = y > 0;
+                    let can_go_south = y < self.height - 1;
+
+                    if can_go_west {
+                        add!((x - 1, y));
+                    }
+
+                    if can_go_east {
+                        add!((x + 1, y));
+                    }
+
+                    if can_go_north {
+                        add!((x, y - 1));
+                    }
+
+                    if can_go_south {
+                        add!((x, y + 1));
+                    }
+                }
+            }
+        }
+
+        VoidAndPerimeter { perimeter, void }
+    }
+}
+
 impl Heightmap<Option<f64>> {
-    pub fn interpolate_missing_using_neighbors(&self, consider_nearest: usize) -> Self {
+    pub fn flood_fill(&mut self) {
+
+        let mut seen = BitVector::new(self.width * self.height);
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let is_void = self[(x, y)].is_none();
+                let considered = seen.contains(self.offset((x, y)));
+                if is_void && !considered {
+                    let total_void = self.expand_void(x, y);
+
+                    let perimeter_points: Vec<f64> = total_void
+                        .perimeter
+                        .iter()
+                        .map(|&(x, y)| {
+                            let pt: Option<f64> = self[(x, y)];
+                            pt.unwrap()
+                        })
+                        .collect();
+
+                    for &(x, y) in &total_void.void {
+                        seen.insert(self.offset((x, y)));
+                    }
+
+                    if total_void.void.len() > (self.width * self.height) / 200 {
+                        info!("Large void {}", total_void.void.len());
+
+                        let med = median(&perimeter_points, 0.1);
+
+                        if let Some(med) = med {
+                            for (x, y) in total_void.void {
+                                self[(x, y)] = Some(med);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn cast_ray(
+        &self,
+        (input_x, input_y): (usize, usize),
+        x_mod: usize,
+        y_mod: usize,
+        limit: usize,
+    ) -> Option<(usize, usize)> {
+        for i in 0..(limit) {
+            let x = input_x + (x_mod * i);
+            let y = input_y + (y_mod * i);
+
+            if x < self.width && y < self.height && self[(x, y)].is_some() {
+                return Some((x, y));
+            }
+        }
+        None
+    }
+
+    fn fill_ray(
+        &mut self,
+        (start_x, start_y): (usize, usize),
+        (end_x, end_y): (usize, usize),
+
+        x_mod: usize,
+        y_mod: usize,
+    ) {
+        let val_start = self[(start_x, start_y)].unwrap();
+        let val_end = self[(end_x, end_y)].unwrap();
+        let med = (val_end + val_start) / 2.;
+
+        let mut cur_x = start_x + x_mod;
+        let mut cur_y = start_y + y_mod;
+
+        while (cur_x != end_x) || (cur_y != end_y) {
+            self[(cur_x, cur_y)] = Some(med);
+            cur_x += x_mod;
+            cur_y += y_mod;
+        }
+    }
+
+    pub fn building_ray_filler(&mut self, max_distance: usize) {
+        let min_size_required_to_fill_a_ray = 3;
+
+        for y in 0..(self.height - min_size_required_to_fill_a_ray) {
+            for x in 0..(self.width - min_size_required_to_fill_a_ray) {
+                let is_some = self[(x, y)].is_some();
+
+                // We only check in 2d as we're doing this over the entire image in this direction
+                // so the behind is already checked.
+                let is_cliff_x = self[(x + 1, y)].is_none();
+                let is_cliff_y = self[(x, y + 1)].is_none();
+
+                if is_some && is_cliff_x {
+                    match self.cast_ray((x + 1, y), 1, 0, max_distance) {
+                        Some((ray_x, ray_y)) => {
+                            self.fill_ray((x, y), (ray_x, ray_y), 1, 0);
+                        }
+                        None => (),
+                    }
+                }
+
+                if is_some && is_cliff_y {
+                    match self.cast_ray((x, y + 1), 0, 1, max_distance) {
+                        Some((ray_x, ray_y)) => {
+                            self.fill_ray((x, y), (ray_x, ray_y), 0, 1);
+                        }
+                        None => (),
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn interpolate_missing_using_neighbors(
+        &self,
+        mode: InterpolationMode,
+        consider_nearest: usize,
+    ) -> Self {
         let mut grid_zones_smoothed = Vec::with_capacity(self.width * self.height);
 
         // We do not use itertools here as this code needs to push to grid_zones_smoothed in a
@@ -64,25 +288,45 @@ impl Heightmap<Option<f64>> {
                 let slot = match self.data[offset] {
                     Some(data) => Some(data),
                     None => {
-                        let mut nearest = Vec::with_capacity(consider_nearest * consider_nearest);
+                        let mut neighbors = Vec::with_capacity(consider_nearest * consider_nearest);
 
-                        let nearest_x_start = grid_x.max(consider_nearest) - (consider_nearest);
-                        let nearest_y_start = grid_y.max(consider_nearest) - (consider_nearest);
+                        let nearest_x_start = if grid_x < consider_nearest {
+                            0
+                        } else {
+                            grid_x - consider_nearest
+                        };
+
+                        let nearest_y_start = if grid_y < consider_nearest {
+                            0
+                        } else {
+                            grid_y - consider_nearest
+                        };
+
+                        let nearest_x_end = (grid_x + consider_nearest).min(self.width);
+                        let nearest_y_end = (grid_y + consider_nearest).min(self.height);
 
                         for (near_x, near_y) in iproduct!(
-                            nearest_x_start..(nearest_x_start + consider_nearest).min(self.width),
-                            nearest_y_start..(nearest_y_start + consider_nearest).min(self.height)
+                            nearest_x_start..nearest_x_end,
+                            nearest_y_start..nearest_y_end
                         ) {
                             let offset = (near_y * self.width) + near_x;
                             if let Some(mode) = self.data[offset] {
-                                nearest.push(mode);
+                                neighbors.push(mode);
                             }
                         }
 
-                        if nearest.len() > 0 {
-                            Some(*nearest.iter().min_by(|a, b| a.total_cmp(b)).unwrap())
-                        } else {
+                        // TODO: If we make consider_nearest make sense, fix this * 2
+                        // Only fill in nodes for which we have a reasonable amount of nearby data.
+                        let expected_neighbors = (consider_nearest * 2) * (consider_nearest * 2);
+                        if neighbors.len() < (expected_neighbors / 4) {
                             None
+                        } else {
+                            match mode {
+                                InterpolationMode::Min => min_elt(&neighbors),
+                                InterpolationMode::Max => max_elt(&neighbors),
+                                InterpolationMode::Mean => mean(&neighbors),
+                                InterpolationMode::Percentile(flt) => median(&neighbors, flt),
+                            }
                         }
                     }
                 };
@@ -121,13 +365,21 @@ impl Heightmap<Option<f64>> {
 
 impl Heightmap<u8> {
     pub fn blur(&mut self) {
-        gaussian_blur_asymmetric_single_channel(
-            &mut self.data,
-            self.width,
-            self.height,
-            0.25,
-            0.25,
-        );
+        gaussian_blur_asymmetric_single_channel(&mut self.data, self.width, self.height, 0.1, 0.1);
+    }
+
+    pub fn to_f64(&self, max_z: f64) -> Heightmap<f64> {
+        let data: Vec<f64> = self
+            .data
+            .iter()
+            .map(|x| (*x as f64 / 255.) * max_z)
+            .collect();
+        Heightmap {
+            data,
+            width: self.width,
+            height: self.height,
+            pixels_per_distance_unit: self.pixels_per_distance_unit,
+        }
     }
 
     pub fn write_to_png(&self, path: &str) {
@@ -209,7 +461,7 @@ impl StreamingHeightmap {
         let ext_x = grid_x + 1;
         let ext_y = grid_y + 1;
         let mut grid_zones = Vec::new();
-        grid_zones.resize_with(ext_x * ext_y, || CKMS::new(0.02));
+        grid_zones.resize_with(ext_x * ext_y, || CKMS::new(0.1));
         Self {
             grid_x,
             grid_y,

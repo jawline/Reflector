@@ -14,7 +14,7 @@ fn add_y_border(
     let offset = vertices.len();
 
     for y in 0..heightmap.height {
-        vertices.push([x as f32, 0., y as f32]);
+        vertices.push([-(x as f32),  y as f32, 0.]);
         normals.push(norm.clone());
         uvs.push([
             x as f32 / heightmap.width as f32,
@@ -37,7 +37,7 @@ fn add_x_border(
     let offset = vertices.len();
 
     for x in 0..heightmap.width {
-        vertices.push([x as f32, 0., y as f32]);
+        vertices.push([-(x as f32), y as f32, 0.]);
         normals.push(norm.clone());
         uvs.push([
             x as f32 / heightmap.width as f32,
@@ -61,18 +61,18 @@ fn add_base(
     normals.push([0., -1., 0.]);
     uvs.push([0., 0.]);
 
-    vertices.push([(heightmap.width - 1) as f32, 0., 0.]);
+    vertices.push([-((heightmap.width - 1) as f32), 0., 0.]);
     normals.push([0., -1., 0.]);
     uvs.push([0., 0.]);
 
-    vertices.push([0., 0., (heightmap.height - 1) as f32]);
-    normals.push([0., -1., 0.]);
+    vertices.push([0., (heightmap.height - 1) as f32, 0.]);
+    normals.push([0., 0., -1.]);
     uvs.push([0., 0.]);
 
     vertices.push([
+        -((heightmap.height - 1) as f32),
         (heightmap.height - 1) as f32,
         0.,
-        (heightmap.height - 1) as f32,
     ]);
     normals.push([0., -1., 0.]);
     uvs.push([0., 0.]);
@@ -127,7 +127,7 @@ impl Model {
         // The body of the mesh
         for y in 0..heightmap.height {
             for x in 0..heightmap.width {
-                vertices.push([x as f32, heightmap[(x, y)] as f32, y as f32]);
+                vertices.push([-(x as f32), y as f32, heightmap[(x, y)] as f32,]);
                 uvs.push([
                     x as f32 / heightmap.width as f32,
                     y as f32 / heightmap.height as f32,
@@ -188,7 +188,7 @@ impl Model {
         );
         let bottom_offset = add_x_border(
             0,
-            [0., 1., 0.],
+            [0., 0., 1.],
             &mut vertices,
             &mut normals,
             &mut uvs,
@@ -196,7 +196,7 @@ impl Model {
         );
         let top_offset = add_x_border(
             heightmap.height - 1,
-            [0., -1., 0.],
+            [0., 0., -1.],
             &mut vertices,
             &mut normals,
             &mut uvs,

@@ -11,9 +11,15 @@ path = "src/bin/converter.rs"
 name = "viewer"
 path = "src/bin/viewer.rs"
 
+
+[[bin]]
+name = "splitter"
+path = "src/bin/splitter.rs"
+
 [dependencies]
 bevy = "0.10.1"
 bevy_panorbit_camera = "0.5.2"
+bitvector = "0.1.5"
 clap = { version = "4.3.1", features = ["derive"] }
 env_logger = "0.10.0"
 fastblur = "0.1.1"

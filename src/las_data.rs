@@ -1,21 +1,68 @@
-use las::{Read, Reader};
+use las::point::Classification;
+use las::{Header, Read, Reader};
 use log::info;
 use std::ffi::OsStr;
 use std::sync::mpsc::sync_channel;
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
-pub fn load_from_directory<F>(
-    path: &str,
-    (scale_x, scale_y, scale_z): (f64, f64, f64),
-    max_threads: usize,
-    mut f: F,
-) where
-    F: FnMut(f64, f64, f64) -> (),
+// We re-expose classification because Las_data does not make it sortable or hashable
+#[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
+pub enum LasType {
+    Ground,
+    Buildings,
+    All,
+}
+
+impl LasType {
+    fn contains(&self, classification: &Classification) -> bool {
+        use Classification::*;
+        match self {
+            LasType::Ground => match classification {
+                Water | Ground => true,
+                _ => false,
+            },
+            LasType::Buildings => match classification {
+                Building | RoadSurface | BridgeDeck | ModelKeyPoint  => true,
+                _ => false,
+            },
+            LasType::All => true,
+        }
+    }
+}
+
+pub fn find_a_header(path: &str) -> Header {
+    let mut header = None;
+    for entry in WalkDir::new(path)
+        .max_depth(100)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+        .filter(|e| {
+            e.path().extension() == Some(&OsStr::new("las"))
+                || e.path().extension() == Some(&OsStr::new("laz"))
+        })
+    {
+        header = Some(
+            Reader::from_path(entry.path())
+                .expect("Unable to open reader")
+                .header()
+                .clone(),
+        );
+        // TODO: Scan all headers and check they are the same.
+        break;
+    }
+
+    header.expect("No files found")
+}
+
+pub fn load_from_directory_points<F>(path: &str, max_threads: usize, mut f: F)
+where
+    F: FnMut(las::point::Point) -> (),
 {
     info!("Beginning iteration over all LAS data");
 
-    let (sender, receiver) = sync_channel(1024 * 1024 * 1024);
+    let (sender, receiver) = sync_channel(1024 * 1024);
 
     let pool = ThreadPool::new(max_threads);
 
@@ -24,9 +71,60 @@ pub fn load_from_directory<F>(
         .into_iter()
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_file())
-        .filter(|e| e.path().extension() == Some(&OsStr::new("las")))
+        .filter(|e| {
+            e.path().extension() == Some(&OsStr::new("las"))
+                || e.path().extension() == Some(&OsStr::new("laz"))
+        })
     {
         let sender = sender.clone();
+        pool.execute(move || {
+            info!("Loading path: {:?}", entry.path());
+            let mut reader = Reader::from_path(entry.path()).expect("Unable to open reader");
+
+            for wrapped_point in reader.points() {
+                sender.send(wrapped_point.expect("File error")).unwrap();
+            }
+
+            drop(sender);
+            info!("Finished");
+        });
+    }
+
+    drop(sender);
+
+    for pt in receiver {
+        f(pt);
+    }
+}
+
+// TODO: Refactor in terms of load_from_directory_points
+pub fn load_from_directory<F>(
+    path: &str,
+    (scale_x, scale_y, scale_z): (f64, f64, f64),
+    max_threads: usize,
+    las_type: &LasType,
+    mut f: F,
+) where
+    F: FnMut(f64, f64, f64) -> (),
+{
+    info!("Beginning iteration over all LAS data");
+
+    let (sender, receiver) = sync_channel(1024 * 1024);
+
+    let pool = ThreadPool::new(max_threads);
+
+    for entry in WalkDir::new(path)
+        .max_depth(100)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+        .filter(|e| {
+            e.path().extension() == Some(&OsStr::new("las"))
+                || e.path().extension() == Some(&OsStr::new("laz"))
+        })
+    {
+        let sender = sender.clone();
+        let las_type = las_type.clone();
         pool.execute(move || {
             info!("Loading path: {:?}", entry.path());
             let mut reader = Reader::from_path(entry.path()).expect("Unable to open reader");
@@ -40,7 +138,10 @@ pub fn load_from_directory<F>(
                     wrapped_point.z * scale_z,
                 );
 
-                sender.send((x, y, z)).unwrap();
+                let is_correct_classification = las_type.contains(&wrapped_point.classification);
+                if is_correct_classification {
+                    sender.send((x, y, z)).unwrap();
+                }
             }
 
             drop(sender);
@@ -73,7 +174,7 @@ impl Limits {
         let mut min_z: Option<f64> = None;
         let mut max_y: Option<f64> = None;
         let mut min_y: Option<f64> = None;
-        load_from_directory(path, scalers, max_threads, |x, y, z| {
+        load_from_directory(path, scalers, max_threads, &LasType::All, |x, y, z| {
             max_x = Some(max_x.unwrap_or(x).max(x));
             max_y = Some(max_y.unwrap_or(y).max(y));
             max_z = Some(max_z.unwrap_or(z).max(z));
