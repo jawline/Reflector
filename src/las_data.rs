@@ -11,6 +11,7 @@ use walkdir::WalkDir;
 pub enum LasType {
     Ground,
     Buildings,
+    GroundAndBuildings,
     All,
 }
 
@@ -23,9 +24,13 @@ impl LasType {
                 _ => false,
             },
             LasType::Buildings => match classification {
-                Building | RoadSurface | BridgeDeck | ModelKeyPoint  => true,
+                Building | RoadSurface | BridgeDeck | ModelKeyPoint => true,
                 _ => false,
             },
+            LasType::GroundAndBuildings => {
+                LasType::Ground.contains(classification)
+                    || LasType::Buildings.contains(classification)
+            }
             LasType::All => true,
         }
     }
@@ -100,12 +105,12 @@ where
 // TODO: Refactor in terms of load_from_directory_points
 pub fn load_from_directory<F>(
     path: &str,
-    (scale_x, scale_y, scale_z): (f64, f64, f64),
+    (scale_x, scale_y, scale_z): (f32, f32, f32),
     max_threads: usize,
     las_type: &LasType,
     mut f: F,
 ) where
-    F: FnMut(f64, f64, f64) -> (),
+    F: FnMut(f32, f32, f32) -> (),
 {
     info!("Beginning iteration over all LAS data");
 
@@ -133,9 +138,9 @@ pub fn load_from_directory<F>(
                 let wrapped_point = wrapped_point.unwrap();
 
                 let (x, y, z) = (
-                    wrapped_point.x * scale_x,
-                    wrapped_point.y * scale_y,
-                    wrapped_point.z * scale_z,
+                    wrapped_point.x as f32 * scale_x,
+                    wrapped_point.y as f32 * scale_y,
+                    wrapped_point.z as f32 * scale_z,
                 );
 
                 let is_correct_classification = las_type.contains(&wrapped_point.classification);
@@ -158,22 +163,22 @@ pub fn load_from_directory<F>(
 
 #[derive(Debug, Default, Clone)]
 pub struct Limits {
-    pub min_x: f64,
-    pub min_y: f64,
-    pub min_z: f64,
-    pub max_x: f64,
-    pub max_y: f64,
-    pub max_z: f64,
+    pub min_x: f32,
+    pub min_y: f32,
+    pub min_z: f32,
+    pub max_x: f32,
+    pub max_y: f32,
+    pub max_z: f32,
 }
 
 impl Limits {
-    pub fn load_from_directory(path: &str, scalers: (f64, f64, f64), max_threads: usize) -> Self {
-        let mut max_x: Option<f64> = None;
-        let mut min_x: Option<f64> = None;
-        let mut max_z: Option<f64> = None;
-        let mut min_z: Option<f64> = None;
-        let mut max_y: Option<f64> = None;
-        let mut min_y: Option<f64> = None;
+    pub fn load_from_directory(path: &str, scalers: (f32, f32, f32), max_threads: usize) -> Self {
+        let mut max_x: Option<_> = None;
+        let mut min_x: Option<_> = None;
+        let mut max_z: Option<_> = None;
+        let mut min_z: Option<_> = None;
+        let mut max_y: Option<_> = None;
+        let mut min_y: Option<_> = None;
         load_from_directory(path, scalers, max_threads, &LasType::All, |x, y, z| {
             max_x = Some(max_x.unwrap_or(x).max(x));
             max_y = Some(max_y.unwrap_or(y).max(y));

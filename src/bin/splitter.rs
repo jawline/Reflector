@@ -38,8 +38,8 @@ fn main() {
 
     println!("Main pass, summarizing grid squares");
 
-    let x_div = (limits.max_x - limits.min_x) / (args.files_x_dim as f64);
-    let y_div = (limits.max_y - limits.min_y) / (args.files_y_dim as f64);
+    let x_div = (limits.max_x - limits.min_x) / (args.files_x_dim as f32);
+    let y_div = (limits.max_y - limits.min_y) / (args.files_y_dim as f32);
 
     println!("XDIV: {} YDIV: {}", x_div, y_div);
 
@@ -56,8 +56,8 @@ fn main() {
 
     load_from_directory_points(&args.input_directory, 1, |point| {
         // Relative to min pt
-        let x_pt = point.x - limits.min_x;
-        let y_pt = point.y - limits.min_y;
+        let x_pt = point.x as f32 - limits.min_x;
+        let y_pt = point.y as f32 - limits.min_y;
 
         // Chunk index
         let x_div = min((x_pt / x_div) as usize, args.files_x_dim - 1);

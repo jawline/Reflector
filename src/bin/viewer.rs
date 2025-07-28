@@ -46,7 +46,7 @@ fn bytes(path: &str) -> Vec<u8> {
     buffer
 }
 
-fn heightmap_to_mesh_and_image(heightmap: &Heightmap<f64>) -> (Mesh, Image) {
+fn heightmap_to_mesh_and_image(heightmap: &Heightmap<f32>) -> (Mesh, Image) {
     let model = Model::of_heightmap(&heightmap);
 
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
@@ -82,7 +82,7 @@ fn setup(
 ) {
     let args = Args::parse();
     let bytes = bytes(&args.input_path);
-    let heightmap: Heightmap<f64> = postcard::from_bytes(&bytes).unwrap();
+    let heightmap: Heightmap<f32> = postcard::from_bytes(&bytes).unwrap();
     let (mesh, heightmap_texture) = heightmap_to_mesh_and_image(&heightmap);
     let (start_x, start_y) = (heightmap.width as f32 / 2., heightmap.height as f32 / 2.);
 
