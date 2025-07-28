@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -eux
+echo "Scanning $1"
+IFS=$'\n'
+for filename in `find "$1"  -type f -name "*.la*"`; do
+  EXTENSION="${filename##*.}"
+  RPATH="$(basename $filename .$EXTENSION)"
+  echo "Doing $filename $RPATH $EXTENSION"
+  ./split_file "$filename" "$2/$RPATH/)"
+done 

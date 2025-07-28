@@ -11,7 +11,8 @@ use walkdir::WalkDir;
 pub enum LasType {
     Ground,
     Buildings,
-    GroundAndBuildings,
+    Water,
+    GroundAndBuildingsAndWater,
     All,
 }
 
@@ -27,9 +28,14 @@ impl LasType {
                 Building | RoadSurface | BridgeDeck | ModelKeyPoint => true,
                 _ => false,
             },
-            LasType::GroundAndBuildings => {
+            LasType::Water => match classification {
+                Water => true,
+                _ => false,
+            },
+            LasType::GroundAndBuildingsAndWater => {
                 LasType::Ground.contains(classification)
                     || LasType::Buildings.contains(classification)
+                    || LasType::Water.contains(classification)
             }
             LasType::All => true,
         }

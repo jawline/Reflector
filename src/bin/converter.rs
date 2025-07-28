@@ -143,7 +143,7 @@ fn main() {
 
     println!("Main pass, summarizing grid squares");
 
-    let grid_zones = construct_heightmap(&limits, &args, &LasType::GroundAndBuildings);
+    let grid_zones = construct_heightmap(&limits, &args, &LasType::GroundAndBuildingsAndWater);
 
     info!("Flipping the Y axis");
     let grid_zones = grid_zones.flip_y();

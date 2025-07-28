@@ -304,7 +304,7 @@ impl Model {
             indices,
         };
         let model_scale_factor = (1. / heightmap.pixels_per_distance_unit) as f32;
-        result.scale((model_scale_factor, 1., model_scale_factor));
+        result.scale((model_scale_factor, model_scale_factor, 1.));
         result
     }
 }
