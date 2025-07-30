@@ -10,6 +10,7 @@ use walkdir::WalkDir;
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub enum LasType {
     Ground,
+    GroundAndWater,
     Buildings,
     Water,
     GroundAndBuildingsAndWater,
@@ -32,6 +33,9 @@ impl LasType {
                 Water => true,
                 _ => false,
             },
+            LasType::GroundAndWater => {
+                LasType::Ground.contains(classification) || LasType::Water.contains(classification)
+            }
             LasType::GroundAndBuildingsAndWater => {
                 LasType::Ground.contains(classification)
                     || LasType::Buildings.contains(classification)

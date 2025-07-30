@@ -104,6 +104,10 @@ struct VoidAndPerimeter {
 }
 
 impl<T: Copy + Clone> Heightmap<Option<T>> {
+    pub fn proportion_of_empty_cells(&self) -> f64 {
+        self.data.iter().filter(|x| x.is_none()).count() as f64 / self.data.len() as f64
+    }
+
     fn expand_void(&self, x: usize, y: usize) -> VoidAndPerimeter {
         let mut void = Vec::new();
         let mut perimeter = Vec::new();

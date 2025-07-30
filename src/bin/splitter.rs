@@ -48,7 +48,8 @@ fn main() {
     for x in 0..(args.files_x_dim as usize) {
         file_grid.push(Vec::new());
         for y in 0..(args.files_y_dim as usize) {
-            let file_name = format!("{}/x_{}_y_{}.las", args.output_directory, x, y);
+            // LAZ for compression
+            let file_name = format!("{}/x_{}_y_{}.laz", args.output_directory, x, y);
             let writer = Writer::from_path(file_name, header.clone()).unwrap();
             file_grid[x].push(writer)
         }

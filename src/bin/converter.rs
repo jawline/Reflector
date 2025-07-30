@@ -1,5 +1,5 @@
 use clap::Parser;
-use log::info;
+use log::{info, error};
 use rust_las_printer::heightmap::{Heightmap, InterpolationMode, StreamingHeightmap};
 use rust_las_printer::las_data::{load_from_directory, LasType, Limits};
 use rust_las_printer::to_3d_model::Model;
@@ -89,27 +89,12 @@ fn construct_heightmap(limits: &Limits, args: &Args, las_type: &LasType) -> Heig
 }
 
 fn build_terrain_map(limits: &Limits, args: &Args) -> Heightmap<Option<f32>> {
-    let mut grid_zones = construct_heightmap(&limits, &args, &LasType::Ground);
-
-    grid_zones.building_ray_filler(5);
-    grid_zones.flood_fill();
-
-    info!("Doing hole filling");
-
-    let grid_zones = (0..args.rounds_of_interpolated_hole_filling).fold(grid_zones, |acc, i| {
-        info!("Neighbor filling round {}", i);
-        acc.interpolate_missing_using_neighbors(
-            InterpolationMode::Mean, // Percentile(0.1),
-            args.consider_nearest_n_neighbors_for_interpolation,
-        )
-    });
-
+    let mut grid_zones = construct_heightmap(&limits, &args, &LasType::GroundAndWater);
     grid_zones
 }
 
 fn build_building_map(limits: &Limits, args: &Args) -> Heightmap<Option<f32>> {
     let mut grid_zones = construct_heightmap(&limits, &args, &LasType::Buildings);
-    grid_zones.building_ray_filler(5);
     grid_zones
 }
 
@@ -143,18 +128,34 @@ fn main() {
 
     println!("Main pass, summarizing grid squares");
 
-    let grid_zones = construct_heightmap(&limits, &args, &LasType::GroundAndBuildingsAndWater);
+    let mut grid_zones = construct_heightmap(&limits, &args, &LasType::GroundAndWater);
+    let buildings = build_building_map(&limits, &args);
+    merge(&mut grid_zones, &buildings);
+
 
     info!("Flipping the Y axis");
     let grid_zones = grid_zones.flip_y();
 
     let write_to = WriteTo::of_string(&args.write_to);
 
+
+    let proportion_of_empty_cells = grid_zones.proportion_of_empty_cells();
+    info!("Proportion of empty cells: {}", proportion_of_empty_cells);
+
+    if proportion_of_empty_cells > 0.5 {
+        error!("BAD INPUT: With this upscaling, more than 50% of the pixels are none.");
+    }
+
     if write_to == WriteTo::UpscaleFmt {
-        let file = File::create(args.output_path).unwrap();
-        let max_z = grid_zones.max_z();
-        let grid_zones = grid_zones.normalize_z_by(max_z);
-        grid_zones.serialize(file).unwrap();
+
+        if grid_zones.proportion_of_empty_cells() > 0.5 {
+            println!("BAD INPUT: With this upscaling, more than 50% of the pixels are none. Skipping serialization.");
+        } else {
+            let file = File::create(args.output_path).unwrap();
+            let max_z = grid_zones.max_z();
+            let grid_zones = grid_zones.normalize_z_by(max_z);
+            grid_zones.serialize(file).unwrap();
+        }
     } else {
         info!("Doing hole filling");
 
