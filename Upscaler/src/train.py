@@ -34,15 +34,17 @@ def dataloader(dataset, batch_size):
 
 
 def norm(image, mask):
-    min_value, max_value = masked_select(image.flatten(), mask.flatten()).aminmax(
-        dim=-1
-    )
-    norm_x = (image - min_value) / (max_value - min_value)
+    min_value, max_value = masked_select(image.flatten(), mask.flatten()).aminmax()
+    print(min_value, max_value)
+    delta = max_value - min_value 
+    norm_x = (image - min_value) / delta
     return norm_x, min_value, max_value
 
 
 def unnorm(image, min_value, max_value):
-    return (image * (max_value - min_value)) + min_value
+    delta = max_value - min_value 
+    image = image * delta
+    return image + min_value
 
 
 def train(

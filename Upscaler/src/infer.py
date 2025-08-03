@@ -55,7 +55,7 @@ def infer_frame(
 
     images.append(src_frame * src_mask)
 
-    src_frame, min_value, max_value = norm(src_frame)
+    src_frame, min_value, max_value = norm(src_frame, src_mask)
 
     src_frame = src_frame.to(device)
     src_mask = src_mask.to(device)
@@ -94,6 +94,9 @@ def infer_frame(
 
     masked_src_frame = step(device, masked_src_frame.to(device), model, scheduler, 0)
     masked_src_frame = combine_with_src_frame(src_frame, src_mask, masked_src_frame)
+
+    images.append(masked_src_frame.to("cpu"))
+
     masked_src_frame = unnorm(masked_src_frame, min_value, max_value)
 
     images.append(masked_src_frame.to("cpu"))
