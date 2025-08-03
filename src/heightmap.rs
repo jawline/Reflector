@@ -369,6 +369,14 @@ impl Heightmap<Option<f32>> {
         }
     }
 
+    pub fn min_z(&self) -> f32 {
+        self.data
+            .iter()
+            .filter_map(|x| *x)
+            .min_by(|a, b| a.total_cmp(b))
+            .unwrap()
+    }
+
     pub fn max_z(&self) -> f32 {
         self.data
             .iter()
@@ -377,20 +385,25 @@ impl Heightmap<Option<f32>> {
             .unwrap()
     }
 
-    pub fn normalize_z_by(&self, max_z: f32) -> Self {
+    pub fn normalize_z_by(&self, min_z: f32, max_z: f32) -> Self {
+        let adjust_z = -min_z;
+        let delta = (max_z - min_z).abs();
         Heightmap {
             data: self
                 .data
                 .iter()
                 .map(|x| match x {
-                    Some(x) => Some(x / max_z),
+                    Some(x) => {
+                        assert!((x + adjust_z) / delta >= 0.);
+                        Some((x + adjust_z) / delta)
+                    }
                     None => None,
                 })
                 .collect(),
             width: self.width,
             height: self.height,
             pixels_per_distance_unit: self.pixels_per_distance_unit,
-            scale_z: max_z,
+            scale_z: delta,
         }
     }
 
@@ -401,7 +414,6 @@ impl Heightmap<Option<f32>> {
         let width = self.width as u16;
         let height = self.height as u16;
         let scale_z = self.scale_z;
-        println!("{} {} {}", width, height, scale_z);
 
         to.write(&width.to_le_bytes())?;
         to.write(&height.to_le_bytes())?;

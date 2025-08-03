@@ -35,3 +35,9 @@ serde = "1.0.163"
 stl_io = "0.7.0"
 threadpool = "1.8.1"
 walkdir = "2.3.3"
+
+
+[profile.release]
+codegen-units = 1
+debug = false
+lto = "fat"

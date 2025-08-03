@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -euvx
+python3 ./src/preprocess_samples.py ~/Training\ Data/ ~/processed_training_data

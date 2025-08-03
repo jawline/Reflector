@@ -1,5 +1,5 @@
 use clap::Parser;
-use log::{info, error};
+use log::{error, info};
 use rust_las_printer::heightmap::{Heightmap, InterpolationMode, StreamingHeightmap};
 use rust_las_printer::las_data::{load_from_directory, LasType, Limits};
 use rust_las_printer::to_3d_model::Model;
@@ -77,7 +77,6 @@ fn construct_heightmap(limits: &Limits, args: &Args, las_type: &LasType) -> Heig
 
     load_from_directory(
         &args.las_folder_path,
-        (args.scale_x, args.scale_y, args.scale_z),
         args.max_threads,
         las_type,
         |x, y, z| {
@@ -89,12 +88,12 @@ fn construct_heightmap(limits: &Limits, args: &Args, las_type: &LasType) -> Heig
 }
 
 fn build_terrain_map(limits: &Limits, args: &Args) -> Heightmap<Option<f32>> {
-    let mut grid_zones = construct_heightmap(&limits, &args, &LasType::GroundAndWater);
+    let grid_zones = construct_heightmap(&limits, &args, &LasType::GroundAndWater);
     grid_zones
 }
 
 fn build_building_map(limits: &Limits, args: &Args) -> Heightmap<Option<f32>> {
-    let mut grid_zones = construct_heightmap(&limits, &args, &LasType::Buildings);
+    let grid_zones = construct_heightmap(&limits, &args, &LasType::Buildings);
     grid_zones
 }
 
@@ -117,7 +116,6 @@ fn main() {
     println!("First pass, collecting limits");
     let limits = Limits::load_from_directory(
         &args.las_folder_path,
-        (args.scale_x, args.scale_y, args.scale_z),
         args.max_threads,
     );
 
@@ -128,16 +126,14 @@ fn main() {
 
     println!("Main pass, summarizing grid squares");
 
-    let mut grid_zones = construct_heightmap(&limits, &args, &LasType::GroundAndWater);
+    let mut grid_zones = build_terrain_map(&limits, &args);
     let buildings = build_building_map(&limits, &args);
     merge(&mut grid_zones, &buildings);
-
 
     info!("Flipping the Y axis");
     let grid_zones = grid_zones.flip_y();
 
     let write_to = WriteTo::of_string(&args.write_to);
-
 
     let proportion_of_empty_cells = grid_zones.proportion_of_empty_cells();
     info!("Proportion of empty cells: {}", proportion_of_empty_cells);
@@ -147,13 +143,13 @@ fn main() {
     }
 
     if write_to == WriteTo::UpscaleFmt {
-
-        if grid_zones.proportion_of_empty_cells() > 0.5 {
+        if grid_zones.proportion_of_empty_cells() > 0.75 {
             println!("BAD INPUT: With this upscaling, more than 50% of the pixels are none. Skipping serialization.");
         } else {
             let file = File::create(args.output_path).unwrap();
+            let min_z = grid_zones.min_z();
             let max_z = grid_zones.max_z();
-            let grid_zones = grid_zones.normalize_z_by(max_z);
+            let grid_zones = grid_zones.normalize_z_by(min_z, max_z);
             grid_zones.serialize(file).unwrap();
         }
     } else {

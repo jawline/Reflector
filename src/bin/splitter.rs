@@ -29,7 +29,7 @@ fn main() {
     let header = find_a_header(&args.input_directory);
 
     println!("First pass, collecting limits");
-    let limits = Limits::load_from_directory(&args.input_directory, (1., 1., 1.), 1);
+    let limits = Limits::load_from_directory(&args.input_directory, 1);
 
     info!(
         "Bounds: {} {} {} {} {} {}",

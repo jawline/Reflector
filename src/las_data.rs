@@ -115,7 +115,6 @@ where
 // TODO: Refactor in terms of load_from_directory_points
 pub fn load_from_directory<F>(
     path: &str,
-    (scale_x, scale_y, scale_z): (f32, f32, f32),
     max_threads: usize,
     las_type: &LasType,
     mut f: F,
@@ -148,9 +147,9 @@ pub fn load_from_directory<F>(
                 let wrapped_point = wrapped_point.unwrap();
 
                 let (x, y, z) = (
-                    wrapped_point.x as f32 * scale_x,
-                    wrapped_point.y as f32 * scale_y,
-                    wrapped_point.z as f32 * scale_z,
+                    wrapped_point.x as f32,
+                    wrapped_point.y as f32,
+                    wrapped_point.z as f32,
                 );
 
                 let is_correct_classification = las_type.contains(&wrapped_point.classification);
@@ -182,14 +181,14 @@ pub struct Limits {
 }
 
 impl Limits {
-    pub fn load_from_directory(path: &str, scalers: (f32, f32, f32), max_threads: usize) -> Self {
+    pub fn load_from_directory(path: &str, max_threads: usize) -> Self {
         let mut max_x: Option<_> = None;
         let mut min_x: Option<_> = None;
         let mut max_z: Option<_> = None;
         let mut min_z: Option<_> = None;
         let mut max_y: Option<_> = None;
         let mut min_y: Option<_> = None;
-        load_from_directory(path, scalers, max_threads, &LasType::All, |x, y, z| {
+        load_from_directory(path, max_threads, &LasType::All, |x, y, z| {
             max_x = Some(max_x.unwrap_or(x).max(x));
             max_y = Some(max_y.unwrap_or(y).max(y));
             max_z = Some(max_z.unwrap_or(z).max(z));
