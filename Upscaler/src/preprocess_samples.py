@@ -23,12 +23,15 @@ def main():
         batch_size=1,
         shuffle=False,
         drop_last=False,
-        num_workers=8,
-        prefetch_factor=32,
+        num_workers=4,
+        prefetch_factor=16,
     )
 
-    for i, element in tqdm(enumerate(dataset)):
-        torch.save(element, f"{to_}/{i}.pt")
+    dset_len = len(dataset)
+
+    for i, element in tqdm(enumerate(dataset), desc=f"Total Length {dset_len}"):
+        if not element["broken"]:
+            torch.save(element, f"{to_}/{i}.pt")
 
 
 if __name__ == "__main__":

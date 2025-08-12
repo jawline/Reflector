@@ -11,7 +11,7 @@ class UNET(nn.Module):
         Attentions: List = [False, False, False, True, True, False],
         Upscales: List = [False, False, False, True, True, True],
         num_groups: int = 16,
-        dropout_prob: float = 0.15,
+        dropout_prob: float = 0.1,
         num_heads: int = 8,
         input_channels: int = 1,
         output_channels: int = 1,
@@ -42,7 +42,7 @@ class UNET(nn.Module):
             )
             setattr(self, f"Layer{i + 1}", layer)
 
-    def forward(self, x, t, mask):
+    def forward(self, x, t):
         x = self.shallow_conv(x)
         residuals = []
         for i in range(self.num_layers // 2):

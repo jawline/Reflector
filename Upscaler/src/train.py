@@ -3,7 +3,18 @@ import numpy as np
 import torch
 import model_loader
 from math import isnan
-from torch import nn, tensor, masked_select, randint, save
+from torch import (
+    nn,
+    tensor,
+    masked_select,
+    randint,
+    save,
+    cat,
+    rand,
+    logical_not,
+    logical_or,
+    logical_and,
+)
 from torch.nn.functional import pad, interpolate
 from torch.utils.data import DataLoader
 from torch.optim import Adam
@@ -11,6 +22,8 @@ from ddpm_scheduler import DDPM_Scheduler
 from unet import UNET
 from tqdm import tqdm
 from constants import num_time_steps
+from dataset import norm
+from infer import display_reverse
 
 
 def set_seed(seed: int = 42):
@@ -28,39 +41,26 @@ def dataloader(dataset, batch_size):
         batch_size=batch_size,
         shuffle=True,
         drop_last=True,
-        num_workers=2,
-        prefetch_factor=2,
+        num_workers=6,
+        prefetch_factor=64,
     )
-
-
-def norm(image, mask):
-    min_value, max_value = masked_select(image.flatten(), mask.flatten()).aminmax()
-    print(min_value, max_value)
-    delta = max_value - min_value 
-    norm_x = (image - min_value) / delta
-    return norm_x, min_value, max_value
-
-
-def unnorm(image, min_value, max_value):
-    delta = max_value - min_value 
-    image = image * delta
-    return image + min_value
 
 
 def train(
     dataset,
-    batch_size: int = 32,
+    batch_size: int = 4,
     num_time_steps: int = num_time_steps,
     num_epochs: int = 150,
     seed: int = -1,
     ema_decay: float = 0.9999,
-    lr=2e-5,
+    lr=0.01,
     checkpoint_path: str = None,
     device=None,
 ):
     set_seed(random.randint(0, 2**32 - 1)) if seed == -1 else set_seed(seed)
+    dataset_len = len(dataset)
     train_loader = dataloader(dataset, batch_size)
-    scheduler, model, optimizer, ema = model_loader.load(
+    scheduler, model, optimizer, ema, scaler = model_loader.load(
         device, checkpoint_path, ema_decay, num_time_steps, lr
     )
 
@@ -71,19 +71,27 @@ def train(
         for bidx, datapoint in enumerate(
             tqdm(train_loader, desc=f"Epoch {i + 1}/{num_epochs}")
         ):
-            optimizer.zero_grad()
-            # TODO: emit training data in fp16 instead.
+
             for_train = datapoint["without_nan"].to(device)
             mask = datapoint["mask"].to(device)
-            for_train, _min, _max = norm(for_train, mask)
-            for_train = for_train.requires_grad_(True)
+
             steps = randint(0, num_time_steps, (batch_size,))
-            for_train, random_data = scheduler.noise_frame(device, for_train, steps)
-            output = model(for_train, steps, mask)
-            loss = criterion(output * mask, random_data * mask)
+
+            for_train, random_data = scheduler.noise_frame(
+                device, for_train, steps
+            )
+
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                output = model(for_train, steps)
+                loss = criterion(
+                    output * mask, random_data * mask 
+                )
+
             total_loss += loss.item()
-            loss.backward()
-            optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad(set_to_none=True)
             ema.update(model)
 
         checkpoint = {
@@ -93,4 +101,6 @@ def train(
         }
 
         save(checkpoint, checkpoint_path)
-        print(f"Epoch {i + 1} | Loss {total_loss / (60000 / batch_size):.5f} (Saved)")
+        print(
+            f"Epoch {i + 1} | Loss {total_loss / (dataset_len / batch_size):.5f} (Saved)"
+        )

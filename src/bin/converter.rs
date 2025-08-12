@@ -1,5 +1,5 @@
 use clap::Parser;
-use log::{error, info};
+use log::{error, warn, info};
 use rust_las_printer::heightmap::{Heightmap, InterpolationMode, StreamingHeightmap};
 use rust_las_printer::las_data::{load_from_directory, LasType, Limits};
 use rust_las_printer::to_3d_model::Model;
@@ -139,12 +139,12 @@ fn main() {
     info!("Proportion of empty cells: {}", proportion_of_empty_cells);
 
     if proportion_of_empty_cells > 0.5 {
-        error!("BAD INPUT: With this upscaling, more than 50% of the pixels are none.");
+        warn!("BAD INPUT: With this upscaling, more than 50% of the pixels are none.");
     }
 
     if write_to == WriteTo::UpscaleFmt {
         if grid_zones.proportion_of_empty_cells() > 0.75 {
-            println!("BAD INPUT: With this upscaling, more than 50% of the pixels are none. Skipping serialization.");
+            error!("REJECTING INPUT DUE TO HIGH PROPORTION OF ERRORS");
         } else {
             let file = File::create(args.output_path).unwrap();
             let min_z = grid_zones.min_z();

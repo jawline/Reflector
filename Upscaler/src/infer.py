@@ -2,7 +2,7 @@ import torch
 import random
 import model_loader
 import matplotlib.pyplot as plt
-import array
+from array import array
 from math import inf, ceil
 from typing import List
 from timm.utils import ModelEmaV3
@@ -10,9 +10,23 @@ from unet import UNET
 from ddpm_scheduler import DDPM_Scheduler
 from einops import rearrange
 from tqdm import tqdm
-from torch import tensor, no_grad, logical_not, rand, randn, randn_like, sqrt, sum
-from constants import num_time_steps
-from train import norm, unnorm
+from torch import (
+    cat,
+    tensor,
+    no_grad,
+    logical_and,
+    logical_or,
+    logical_not,
+    rand,
+    randn,
+    randn_like,
+    sqrt,
+    sum,
+    transpose,
+)
+from torch.nn.functional import pad
+from constants import num_time_steps, tile_width, tile_height
+from dataset import norm, unnorm
 
 
 def display_reverse(images: List):
@@ -34,13 +48,14 @@ def prepare_model(device, checkpoint_path, ema_decay, num_time_steps):
 
 
 def step(device, frame, model, scheduler, step):
-    # The third argument to model is a mask which is ignored with no_grad
-    predicted_noise = model(frame, [step], frame)
+    predicted_noise = model(frame, [step])
     return scheduler.denoise_from(device, frame, predicted_noise, step)
 
 
 def infer_noise_mask(device, scheduler, src_frame, src_mask, step):
-    noised_frame, _random_data = scheduler.noise_frame(device, src_frame, [step])
+    noised_frame, _random_data = scheduler.noise_frame(
+        device, src_frame, src_mask, [step]
+    )
     return noised_frame * src_mask
 
 
@@ -82,11 +97,11 @@ def infer_frame(
         # of the iterative process all at once leads to very incoherent samples, so in practice
         # adding a bit of the noise back and iterating through every time step has empirically
         # been shown to generate better samples."
-        if which_step != 0:
-            # TODO: which_step or which_step - 1
-            e = randn_like(src_frame).to(device)
-            beta = sqrt(scheduler.beta[[which_step]]).to(device)
-            masked_src_frame = masked_src_frame + (e * beta)
+        # if which_step != 0:
+        #    # TODO: which_step or which_step - 1
+        #    e = randn_like(src_frame).to(device)
+        #    beta = sqrt(scheduler.beta[[which_step]]).to(device)
+        #    masked_src_frame = masked_src_frame + (e * beta)
 
         masked_src_frame = (masked_src_frame * guess_mask) + (src_frame * src_mask)
         if which_step in sample_times:
@@ -97,7 +112,9 @@ def infer_frame(
 
     images.append(masked_src_frame.to("cpu"))
 
-    masked_src_frame = unnorm(masked_src_frame, min_value, max_value)
+    masked_src_frame = unnorm(
+        masked_src_frame, min_value.to(device), max_value.to(device)
+    )
 
     images.append(masked_src_frame.to("cpu"))
     return images
@@ -117,11 +134,14 @@ def masked_inference(
             model = ema.module.eval()
             datapoint = random.choice(dataset)
 
-            src_frame = datapoint["without_nan"].reshape((1, 1, 128, 128))
-            src_mask = datapoint["mask"].reshape((1, 1, 128, 128))
+            src_frame = datapoint["without_nan"].reshape(
+                (1, 1, tile_width, tile_height)
+            )
+            src_mask = datapoint["mask"].reshape((1, 1, tile_width, tile_height))
+            display_reverse([src_frame.to("cpu"), src_frame.to("cpu")])
 
             # Skip a candidate if it has a lot of data
-            if sum(src_mask) > (128 * 128) * 0.96:
+            if sum(src_mask) > (tile_width * tile_height) * 0.96:
                 print("Skip candidate, too nice")
                 continue
 
@@ -144,7 +164,7 @@ def generative_inference(
     with no_grad():
         model = ema.module.eval()
         for i in range(10):
-            z = rand(size=(1, 1, 128, 128))
+            z = rand(size=(1, 1, tile_width, tile_height))
             mask = tensor([False]).repeat(z.shape)
             images = infer_frame(
                 device, z, mask, model, scheduler, num_time_steps, times
@@ -154,18 +174,17 @@ def generative_inference(
 
 # Compute the max distance between elements on the same row in linear time.
 def compute_max_distance_row_wise(src_mask):
-    rows = array.array()
-    rows.extend(src_mask.shape[0])
+    rows = []
 
     for y, row in enumerate(src_mask):
         rlen = len(row)
-        dist_left = array.array()
-        dist_right = array.array()
-        results = array.array()
+        dist_left = array("f")
+        dist_right = array("f")
+        results = array("f")
 
-        dist_left.extend(rlen)
-        dist_right.extend(rlen)
-        results.extend(rlen)
+        dist_left.extend([0] * rlen)
+        dist_right.extend([0] * rlen)
+        results.extend([0] * rlen)
 
         left_ctr = inf
         right_ctr = inf
@@ -178,7 +197,7 @@ def compute_max_distance_row_wise(src_mask):
                 left_ctr = 0
             if row[idx_from_right]:
                 right_ctr = 0
-            dist_left[i] = left_ctr
+            dist_left[x] = left_ctr
             dist_right[idx_from_right] = right_ctr
 
         for x in range(rlen):
@@ -189,22 +208,22 @@ def compute_max_distance_row_wise(src_mask):
             else:
                 results[x] = min(dist_left[x - 1], dist_right[x + 1])
 
-        rows[y] = results
+        rows.append(results)
 
     return tensor(rows)
 
 
 def compute_distance_mask(src_mask):
-    row_distances = compute_max_distances_row_wise(src_mask)
+    row_distances = compute_max_distance_row_wise(src_mask)
     col_distances = transpose(
-        compute_max_distances_row_wise(transpose(src_mask, 0, 1)), 0, 1
+        compute_max_distance_row_wise(transpose(src_mask, 0, 1)), 0, 1
     )
-    return min(row_distances, col_distances)
+    return torch.min(row_distances, col_distances)
 
 
 def compute_threshold(src_mask):
     avg_dim = (src_mask.shape[0] + src_mask.shape[1]) / 2
-    return ceil(avg_dim * 0.02)
+    return ceil(avg_dim * 0.01)
 
 
 # We don't want to infill everything - some regions like large bodies of water
@@ -213,7 +232,9 @@ def compute_threshold(src_mask):
 # To decide which regions to keep after infilling, we use this mask
 def compute_infill_keep_mask(src_mask):
     threshold = compute_threshold(src_mask)
-    return logical_and(not (src_mask), compute_max_distance(src_mask) <= threshold)
+    return logical_and(
+        logical_not(src_mask), compute_distance_mask(src_mask) <= threshold
+    )
 
 
 def whole_datasource_tiled_inference(
@@ -231,17 +252,19 @@ def whole_datasource_tiled_inference(
     times = []
 
     with no_grad():
+        print("Starting to compute infill mask")
         keep_mask = compute_infill_keep_mask(src_mask)
+        print("Computed infill mask")
         tiles_y = ceil(src_frame.shape[0] / kernel_height)
         tiles_x = ceil(src_frame.shape[1] / kernel_width)
 
-        y_tiles = array.array().extend(tiles_y)
+        y_tiles = []
 
         # Roughly, split the full heightmap up into chunks of kernel width and height, then for each
         # chunk compute the keep and tile masks. If the number of pixels we want to infer data for is non zero then run an inference and combine the result using the keep mask, otherwise preserve the old data and skip inference.
         for y_tile in range(tiles_y):
             print("Starting new row inference")
-            x_tiles = array.array().extend(tiles_x)
+            x_tiles = []
 
             for x_tile in range(tiles_x):
                 print(f"Considering inference on tile x={x_tile} y={y_tile}")
@@ -252,22 +275,41 @@ def whole_datasource_tiled_inference(
                 start_x = x_tile * kernel_width
                 end_x = (x_tile + 1) * kernel_width
 
-                tile_data = (
-                    src_frame[start_y:end_y][start_x:end_x].contiguous().to(device)
+                print(
+                    f"Starting part shapes {src_frame.shape} {keep_mask.shape} {start_x} {end_x} {start_y} {end_y}"
                 )
+
+                tile_data = src_frame[start_y:end_y, start_x:end_x].contiguous()
 
                 tile_mask = (
-                    src_mask[start_y:end_y][start_x:end_x].contiguous().to(device)
+                    src_mask[start_y:end_y, start_x:end_x].contiguous().to(device)
                 )
 
-                keep_mask = (
-                    keep_mask[start_y:end_y][start_x:end_x].contiguous().to(device)
+                tile_keep_mask = keep_mask[start_y:end_y, start_x:end_x].contiguous()
+
+                print(
+                    f"extracted tiles {tile_data.shape} {tile_mask.shape} {tile_keep_mask.shape}"
                 )
+
+                pad_y = kernel_height - tile_data.shape[0]
+                pad_x = kernel_width - tile_data.shape[1]
+                pad_amt = (0, pad_x, 0, pad_y)
+                print(f"padding {pad_x}, {pad_y} {tile_data.shape}")
+                tile_data = pad(tile_data, pad_amt, "constant", 0.0)
+                tile_mask = pad(tile_mask, pad_amt, "constant", False)
+                tile_keep_mask = pad(tile_keep_mask, pad_amt, "constant", False)
+
+                tile_data = tile_data.to(device)
+                tile_mask = tile_mask.to(device)
+                tile_keep_mask = tile_keep_mask.to(device)
 
                 new_tile = tile_data
+                print(
+                    f"padded tiles {tile_data.shape}, {tile_mask.shape}, {tile_keep_mask.shape}"
+                )
 
                 tiles_that_dont_need_inference = logical_and(
-                    src_mask, logical_not(keep_mask)
+                    tile_mask, logical_not(tile_keep_mask)
                 )
 
                 need_to_do_inference = (
@@ -275,22 +317,32 @@ def whole_datasource_tiled_inference(
                 )
 
                 if need_to_do_inference:
-                    print(f"Inferring tile x={x_tile} y={y_tile}")
+                    print(
+                        f"Inferring tile x={x_tile} y={y_tile} {tile_data.shape} {tile_mask.shape}"
+                    )
 
                     inference = infer_frame(
                         device,
-                        tile_data,
-                        tile_mask,
+                        tile_data.reshape((1, 1, kernel_width, kernel_height)),
+                        tile_mask.reshape((1, 1, kernel_width, kernel_height)),
                         model,
                         scheduler,
                         num_time_steps,
                         times,
                     )[-1]
 
+                    inference = inference.reshape((kernel_width, kernel_height))
+
                     # We use the keep mask here to avoid it damaging inference, since the values are None
                     # and do need prediction but we don't actually want to keep them in our result.
+                    print(
+                        "Pre combine",
+                        tile_data.shape,
+                        tile_keep_mask.shape,
+                        inference.shape,
+                    )
                     new_tile = combine_with_src_frame(
-                        src_frame, logical_not(keep_mask), result
+                        tile_data, logical_not(tile_keep_mask), inference.to(device)
                     )
                 else:
                     print(f"Skipping tile x={x_tile} y={y_tile}")
@@ -298,7 +350,15 @@ def whole_datasource_tiled_inference(
 
             y_tiles.append(cat(x_tiles, dim=1))
 
-        result = cat(y_tiles, dim=0)
-        display_reverse([result])
+        result = cat(y_tiles, dim=0)[0 : src_frame.shape[0], 0 : src_frame.shape[1]]
+        src_shape = (1, 1, src_frame.shape[0], src_frame.shape[1])
+        display_reverse(
+            [
+                src_frame.reshape(src_shape).to("cpu"),
+                src_mask.reshape(src_shape).to("cpu"),
+                keep_mask.reshape(src_shape).to("cpu"),
+                result.reshape(src_shape).to("cpu"),
+            ]
+        )
 
         return result

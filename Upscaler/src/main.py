@@ -2,7 +2,11 @@ import sys
 import torch
 from train import train
 from dataset import TerrainDataset
-from infer import masked_inference, generative_inference
+from infer import (
+    masked_inference,
+    generative_inference,
+    whole_datasource_tiled_inference,
+)
 from sample_loader import load_sample, prepare_tensor
 from constants import tile_width, tile_height
 
