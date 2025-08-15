@@ -11,11 +11,11 @@ class UNET(nn.Module):
         Attentions: List = [False, False, False, True, True, False],
         Upscales: List = [False, False, False, True, True, True],
         num_groups: int = 16,
-        dropout_prob: float = 0.1,
+        dropout_prob: float = 0.15,
         num_heads: int = 8,
         input_channels: int = 1,
         output_channels: int = 1,
-        time_steps: int = 1000,
+        time_steps: int = None,
     ):
         super().__init__()
         self.num_layers = len(Channels)

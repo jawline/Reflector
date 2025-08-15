@@ -53,7 +53,7 @@ def train(
     num_epochs: int = 150,
     seed: int = -1,
     ema_decay: float = 0.9999,
-    lr=0.01,
+    lr=0.001,
     checkpoint_path: str = None,
     device=None,
 ):
@@ -72,13 +72,12 @@ def train(
             tqdm(train_loader, desc=f"Epoch {i + 1}/{num_epochs}")
         ):
 
-            for_train = datapoint["without_nan"].to(device)
-            mask = datapoint["mask"].to(device)
-
-            steps = randint(0, num_time_steps, (batch_size,))
+            for_train = datapoint["without_nan"].to(device, non_blocking=True)
+            mask = datapoint["mask"].to(device, non_blocking=True)
+            steps = randint(0, num_time_steps, (batch_size,), device=device)
 
             for_train, random_data = scheduler.noise_frame(
-                device, for_train, steps
+                for_train, steps
             )
 
             with torch.autocast(device_type="cuda", dtype=torch.float16):
@@ -98,6 +97,7 @@ def train(
             "weights": model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "ema": ema.state_dict(),
+            "scaler": scaler.state_dict(),
         }
 
         save(checkpoint, checkpoint_path)

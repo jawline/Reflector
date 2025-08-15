@@ -10,7 +10,7 @@ class SinusoidalEmbeddings(nn.Module):
         embeddings = zeros(time_steps, embed_dim, requires_grad=False)
         embeddings[:, 0::2] = sin(position * div)
         embeddings[:, 1::2] = cos(position * div)
-        self.embeddings = embeddings
+        self.register_buffer('embeddings', embeddings)
 
     def forward(self, x, t):
-        return self.embeddings[t][:, :, None, None].to(x.device)
+        return self.embeddings[t][:, :, None, None]

@@ -41,7 +41,7 @@ def display_reverse(images: List):
 
 
 def prepare_model(device, checkpoint_path, ema_decay, num_time_steps):
-    scheduler, model, optimizer, ema = model_loader.load(
+    scheduler, model, optimizer, ema, scaler = model_loader.load(
         device, checkpoint_path, ema_decay, num_time_steps, lr=0.1
     )
     return ema, scheduler
@@ -54,7 +54,7 @@ def step(device, frame, model, scheduler, step):
 
 def infer_noise_mask(device, scheduler, src_frame, src_mask, step):
     noised_frame, _random_data = scheduler.noise_frame(
-        device, src_frame, src_mask, [step]
+        src_frame, [step]
     )
     return noised_frame * src_mask
 
@@ -97,11 +97,11 @@ def infer_frame(
         # of the iterative process all at once leads to very incoherent samples, so in practice
         # adding a bit of the noise back and iterating through every time step has empirically
         # been shown to generate better samples."
-        # if which_step != 0:
-        #    # TODO: which_step or which_step - 1
-        #    e = randn_like(src_frame).to(device)
-        #    beta = sqrt(scheduler.beta[[which_step]]).to(device)
-        #    masked_src_frame = masked_src_frame + (e * beta)
+        if which_step != 0:
+           # TODO: which_step or which_step - 1
+           e = randn_like(src_frame).to(device)
+           beta = sqrt(scheduler.beta[[which_step]]).to(device)
+           masked_src_frame = masked_src_frame + (e * beta)
 
         masked_src_frame = (masked_src_frame * guess_mask) + (src_frame * src_mask)
         if which_step in sample_times:
