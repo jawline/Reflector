@@ -1,15 +1,9 @@
 use crate::las_data::Limits;
-use bitvector::BitVector;
-use fastblur::gaussian_blur_asymmetric_single_channel;
 use itertools::iproduct;
 use log::info;
 use quantiles::ckms::CKMS;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashSet, VecDeque};
-use std::fs::File;
-use std::io::{BufWriter, Error, Write};
 use std::ops::{Index, IndexMut};
-use std::path::Path;
 
 #[derive(Serialize, Deserialize)]
 pub struct Heightmap<T: Clone + Copy> {
@@ -93,186 +87,13 @@ pub fn max_elt(neighbors: &[f32]) -> Option<f32> {
     neighbors.iter().max_by(|a, b| a.total_cmp(b)).copied()
 }
 
-#[derive(Debug)]
-struct VoidAndPerimeter {
-    void: Vec<(usize, usize)>,
-    perimeter: Vec<(usize, usize)>,
-}
-
 impl<T: Copy + Clone> Heightmap<Option<T>> {
     pub fn proportion_of_empty_cells(&self) -> f64 {
         self.data.iter().filter(|x| x.is_none()).count() as f64 / self.data.len() as f64
     }
-
-    fn expand_void(&self, x: usize, y: usize) -> VoidAndPerimeter {
-        let mut void = Vec::new();
-        let mut perimeter = Vec::new();
-
-        let mut seen = HashSet::new();
-        let mut worklist = VecDeque::new();
-
-        macro_rules! add {
-            ($l:expr) => {
-                match seen.contains(&$l) {
-                    true => (),
-                    false => {
-                        seen.insert($l);
-                        worklist.push_back($l);
-                    }
-                }
-            };
-        }
-
-        add!((x, y));
-
-        while let Some((x, y)) = worklist.pop_front() {
-            match self[(x, y)] {
-                Some(_) => perimeter.push((x, y)),
-                None =>
-                /* Void */
-                {
-                    void.push((x, y));
-                    let can_go_west = x > 0;
-                    let can_go_east = x < self.width - 1;
-                    let can_go_north = y > 0;
-                    let can_go_south = y < self.height - 1;
-
-                    if can_go_west {
-                        add!((x - 1, y));
-                    }
-
-                    if can_go_east {
-                        add!((x + 1, y));
-                    }
-
-                    if can_go_north {
-                        add!((x, y - 1));
-                    }
-
-                    if can_go_south {
-                        add!((x, y + 1));
-                    }
-                }
-            }
-        }
-
-        VoidAndPerimeter { perimeter, void }
-    }
 }
 
 impl Heightmap<Option<f32>> {
-    pub fn flood_fill(&mut self) {
-        let mut seen = BitVector::new(self.width * self.height);
-
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let is_void = self[(x, y)].is_none();
-                let considered = seen.contains(self.offset((x, y)));
-                if is_void && !considered {
-                    let total_void = self.expand_void(x, y);
-
-                    let perimeter_points: Vec<f32> = total_void
-                        .perimeter
-                        .iter()
-                        .map(|&(x, y)| {
-                            let pt: Option<f32> = self[(x, y)];
-                            pt.unwrap()
-                        })
-                        .collect();
-
-                    for &(x, y) in &total_void.void {
-                        seen.insert(self.offset((x, y)));
-                    }
-
-                    if total_void.void.len() > (self.width * self.height) / 200 {
-                        info!("Large void {}", total_void.void.len());
-
-                        let med = median(&perimeter_points, 0.1);
-
-                        if let Some(med) = med {
-                            for (x, y) in total_void.void {
-                                self[(x, y)] = Some(med);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fn cast_ray(
-        &self,
-        (input_x, input_y): (usize, usize),
-        x_mod: usize,
-        y_mod: usize,
-        limit: usize,
-    ) -> Option<(usize, usize)> {
-        for i in 0..(limit) {
-            let x = input_x + (x_mod * i);
-            let y = input_y + (y_mod * i);
-
-            if x < self.width && y < self.height && self[(x, y)].is_some() {
-                return Some((x, y));
-            }
-        }
-        None
-    }
-
-    fn fill_ray(
-        &mut self,
-        (start_x, start_y): (usize, usize),
-        (end_x, end_y): (usize, usize),
-
-        x_mod: usize,
-        y_mod: usize,
-    ) {
-        let val_start = self[(start_x, start_y)].unwrap();
-        let val_end = self[(end_x, end_y)].unwrap();
-        let med = (val_end + val_start) / 2.;
-
-        let mut cur_x = start_x + x_mod;
-        let mut cur_y = start_y + y_mod;
-
-        while (cur_x != end_x) || (cur_y != end_y) {
-            self[(cur_x, cur_y)] = Some(med);
-            cur_x += x_mod;
-            cur_y += y_mod;
-        }
-    }
-
-    pub fn building_ray_filler(&mut self, max_distance: usize) {
-        let min_size_required_to_fill_a_ray = 3;
-
-        for y in 0..(self.height - min_size_required_to_fill_a_ray) {
-            for x in 0..(self.width - min_size_required_to_fill_a_ray) {
-                let is_some = self[(x, y)].is_some();
-
-                // We only check in 2d as we're doing this over the entire image in this direction
-                // so the behind is already checked.
-                let is_cliff_x = self[(x + 1, y)].is_none();
-                let is_cliff_y = self[(x, y + 1)].is_none();
-
-                if is_some && is_cliff_x {
-                    match self.cast_ray((x + 1, y), 1, 0, max_distance) {
-                        Some((ray_x, ray_y)) => {
-                            self.fill_ray((x, y), (ray_x, ray_y), 1, 0);
-                        }
-                        None => (),
-                    }
-                }
-
-                if is_some && is_cliff_y {
-                    match self.cast_ray((x, y + 1), 0, 1, max_distance) {
-                        Some((ray_x, ray_y)) => {
-                            self.fill_ray((x, y), (ray_x, ray_y), 0, 1);
-                        }
-                        None => (),
-                    }
-                }
-            }
-        }
-    }
-
     pub fn interpolate_missing_using_neighbors(
         &self,
         mode: InterpolationMode,
@@ -427,61 +248,6 @@ impl Heightmap<Option<f32>> {
             height: self.height,
             scale_z: self.scale_z,
         }
-    }
-
-    pub fn serialize<W>(self, mut to: W) -> Result<(), Error>
-    where
-        W: Write,
-    {
-        let width = self.width as u16;
-        let height = self.height as u16;
-        let scale_z = self.scale_z;
-
-        to.write(&width.to_le_bytes())?;
-        to.write(&height.to_le_bytes())?;
-        to.write(&scale_z.to_le_bytes())?;
-
-        for point in self.data {
-            let point = match point {
-                Some(x) => x,
-                None => f32::NAN,
-            };
-            to.write(&point.to_le_bytes())?;
-        }
-
-        Ok(())
-    }
-}
-
-impl Heightmap<u8> {
-    pub fn blur(&mut self) {
-        gaussian_blur_asymmetric_single_channel(&mut self.data, self.width, self.height, 0.1, 0.1);
-    }
-
-    pub fn to_f32(&self) -> Heightmap<f32> {
-        let data: Vec<f32> = self
-            .data
-            .iter()
-            .map(|x| (*x as f32 / 255.) * self.scale_z)
-            .collect();
-        Heightmap {
-            data,
-            width: self.width,
-            height: self.height,
-            scale_z: 1.,
-        }
-    }
-
-    pub fn write_to_png(&self, path: &str) {
-        let path = Path::new(path);
-        let file = File::create(path).unwrap();
-        let ref mut w = BufWriter::new(file);
-        let mut encoder = png::Encoder::new(w, (self.width) as u32, (self.height) as u32);
-        encoder.set_color(png::ColorType::Grayscale);
-        encoder.set_depth(png::BitDepth::Eight);
-        let mut writer = encoder.write_header().unwrap();
-
-        writer.write_image_data(&self.data).unwrap(); // Save
     }
 }
 
