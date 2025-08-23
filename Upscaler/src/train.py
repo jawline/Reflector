@@ -51,10 +51,10 @@ def dataloader(dataset, batch_size):
 
 
 def kl_loss(encoded_distribution):
-    q_dist = Normal(mu, torch.exp(0.5 * logvar))
+    q_dist = Normal(encoded_distribution.mean, torch.exp(0.5 * encoded_distribution.log_var))
     p_dist = Normal(
         torch.zeros_like(encoded_distribution.mean),
-        torch.ones_like(encoded_distribution.logvar),
+        torch.ones_like(encoded_distribution.log_var),
     )
     return kl_divergence(q_dist, p_dist).sum()
 
@@ -86,13 +86,15 @@ def train_auto(
             for_train = datapoint["without_nan"].to(device, non_blocking=True)
             mask = datapoint["mask"].to(device, non_blocking=True)
 
-            encoded = autoencoder.encode(for_train * mask).sample()
-            decoded = autoencoder.decode(encoded)
+            encoded = autoencoder.encode(for_train * mask)
+            decoded = autoencoder.decode(encoded.sample())
             output_loss = criterion(decoded * mask, for_train * mask)
             kl_divergence_loss = kl_loss(encoded)
 
-            (output_loss + kl_divergence_loss).backward()
+            loss = (output_loss + kl_divergence_loss)
+            loss.backward()
             optimizer.step()
+
             total_loss += loss.item()
 
         print(

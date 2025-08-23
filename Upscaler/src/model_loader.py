@@ -26,7 +26,7 @@ def create_autoencoder(device, lr):
         n_resnet_blocks=2,
     ).to(device)
     optimizer = Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=lr)
-    autoencoder = Autoencoder(encoder, decoder, emb_channels=1, z_channels=4).to(device)
+    autoencoder = Autoencoder(encoder, decoder, emb_channels=8, z_channels=4).to(device)
     return autoencoder, optimizer
 
 
@@ -43,7 +43,7 @@ def load_autoencoder(device, file, lr):
     except Exception as e:
         print("Could not load checkpoint", e)
 
-    return scheduler, model, optimizer, ema, scaler
+    return autoencoder, optimizer
 
 
 def create(device, ema_decay, num_time_steps, lr):
