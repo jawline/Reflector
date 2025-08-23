@@ -53,9 +53,7 @@ def step(device, frame, model, scheduler, step):
 
 
 def infer_noise_mask(device, scheduler, src_frame, src_mask, step):
-    noised_frame, _random_data = scheduler.noise_frame(
-        src_frame, [step]
-    )
+    noised_frame, _random_data = scheduler.noise_frame(src_frame, [step])
     return noised_frame * src_mask
 
 
@@ -92,16 +90,13 @@ def infer_frame(
         )
         masked_src_frame = step(device, masked_src_frame, model, scheduler, which_step)
 
-        # This might not be necessary, but per the article I constructed this from
-        # "For example, estimating and subtracting the total amount of noise in the beginning
-        # of the iterative process all at once leads to very incoherent samples, so in practice
-        # adding a bit of the noise back and iterating through every time step has empirically
-        # been shown to generate better samples."
+        # Add some noise back into the image
         if which_step != 0:
-           # TODO: which_step or which_step - 1
-           e = randn_like(src_frame).to(device)
-           beta = sqrt(scheduler.beta[[which_step]]).to(device)
-           masked_src_frame = masked_src_frame + (e * beta)
+            # TODO: which_step or which_step - 1
+            e = randn_like(src_frame).to(device)
+            # print("beta", scheduler.beta[[which_step]], sqrt(scheduler.beta[[which_step]]))
+            beta = sqrt(scheduler.beta[[which_step]]).to(device)
+            masked_src_frame = masked_src_frame + (e * beta)
 
         masked_src_frame = (masked_src_frame * guess_mask) + (src_frame * src_mask)
         if which_step in sample_times:
@@ -130,9 +125,9 @@ def masked_inference(
     ema, scheduler = prepare_model(device, checkpoint_path, ema_decay, num_time_steps)
     times = []
     with no_grad():
-        while True:
+        for elt in dataset:
             model = ema.module.eval()
-            datapoint = random.choice(dataset)
+            datapoint = elt
 
             src_frame = datapoint["without_nan"].reshape(
                 (1, 1, tile_width, tile_height)
@@ -159,7 +154,7 @@ def generative_inference(
     ema_decay: float = 0.9999,
 ):
     ema, scheduler = prepare_model(device, checkpoint_path, ema_decay, num_time_steps)
-    times = []
+    times = [100, 200, 300, 400, 500, 600, 700, 800, 900]
 
     with no_grad():
         model = ema.module.eval()
@@ -223,7 +218,7 @@ def compute_distance_mask(src_mask):
 
 def compute_threshold(src_mask):
     avg_dim = (src_mask.shape[0] + src_mask.shape[1]) / 2
-    return ceil(avg_dim * 0.01)
+    return ceil(avg_dim * 0.03)
 
 
 # We don't want to infill everything - some regions like large bodies of water
@@ -235,6 +230,10 @@ def compute_infill_keep_mask(src_mask):
     return logical_and(
         logical_not(src_mask), compute_distance_mask(src_mask) <= threshold
     )
+
+
+# To improve output we make sure we overlap some of the rows and columns with previous inferences during the tiled inference
+tile_overlap = 8
 
 
 def whole_datasource_tiled_inference(
@@ -254,26 +253,21 @@ def whole_datasource_tiled_inference(
     with no_grad():
         print("Starting to compute infill mask")
         keep_mask = compute_infill_keep_mask(src_mask)
+
         print("Computed infill mask")
-        tiles_y = ceil(src_frame.shape[0] / kernel_height)
-        tiles_x = ceil(src_frame.shape[1] / kernel_width)
 
         y_tiles = []
 
         # Roughly, split the full heightmap up into chunks of kernel width and height, then for each
         # chunk compute the keep and tile masks. If the number of pixels we want to infer data for is non zero then run an inference and combine the result using the keep mask, otherwise preserve the old data and skip inference.
-        for y_tile in range(tiles_y):
+        for start_y in range(0, src_frame.shape[0], kernel_height - tile_overlap):
             print("Starting new row inference")
             x_tiles = []
 
-            for x_tile in range(tiles_x):
-                print(f"Considering inference on tile x={x_tile} y={y_tile}")
-
+            for start_x in range(0, src_frame.shape[1], kernel_width - tile_overlap):
                 # TODO: Rather than this we could combine all the images into a tensor and then use chunks
-                start_y = y_tile * kernel_height
-                end_y = (y_tile + 1) * kernel_height
-                start_x = x_tile * kernel_width
-                end_x = (x_tile + 1) * kernel_width
+                end_y = start_y + kernel_height
+                end_x = start_x + kernel_width
 
                 print(
                     f"Starting part shapes {src_frame.shape} {keep_mask.shape} {start_x} {end_x} {start_y} {end_y}"
@@ -317,9 +311,7 @@ def whole_datasource_tiled_inference(
                 )
 
                 if need_to_do_inference:
-                    print(
-                        f"Inferring tile x={x_tile} y={y_tile} {tile_data.shape} {tile_mask.shape}"
-                    )
+                    print(f"Inferring tile {tile_data.shape} {tile_mask.shape}")
 
                     inference = infer_frame(
                         device,
@@ -345,7 +337,15 @@ def whole_datasource_tiled_inference(
                         tile_data, logical_not(tile_keep_mask), inference.to(device)
                     )
                 else:
-                    print(f"Skipping tile x={x_tile} y={y_tile}")
+                    print(f"Skipping tile")
+
+                # Remove the tile overlap
+                if start_x != 0:
+                    new_tile = new_tile[:, tile_overlap:]
+
+                if start_y != 0:
+                    new_tile = new_tile[tile_overlap:, :]
+
                 x_tiles.append(new_tile)
 
             y_tiles.append(cat(x_tiles, dim=1))

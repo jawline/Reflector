@@ -78,5 +78,7 @@ def prepare_tensor(sample_tensor):
     mask = tensor([[not isnan(x) for x in row] for row in sample_tensor]).reshape(
         sample_tensor.shape
     )
+
     without_nan = sample_tensor.apply_(replace_nan_with_zero)
+
     return without_nan, mask

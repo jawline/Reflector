@@ -4,7 +4,9 @@ from torch import nn, linspace, cumprod, randn_like, sqrt, logical_not
 class DDPM_Scheduler:
     def __init__(self, num_time_steps=None, device=None):
         super().__init__()
-        self.beta = linspace(1e-4, 0.02, num_time_steps, requires_grad=False, device=device)
+        self.beta = linspace(
+            1e-4, 0.02, num_time_steps, requires_grad=False, device=device
+        )
         alpha = 1 - self.beta
         self.alpha = cumprod(alpha, dim=0).requires_grad_(False)
         self.device = device
@@ -13,8 +15,8 @@ class DDPM_Scheduler:
         t = [step]
         beta = self.beta[t]
         alpha = self.alpha[t]
-        weight_frame_by = (1 / (sqrt(1 - beta)))
-        weight_noise_by = (beta / ((sqrt(1 - alpha)) * (sqrt(1 - beta))))
+        weight_frame_by = 1 / (sqrt(1 - beta))
+        weight_noise_by = beta / ((sqrt(1 - alpha)) * (sqrt(1 - beta)))
         next_frame = (weight_frame_by * frame) - (weight_noise_by * predicted_noise)
         return next_frame
 

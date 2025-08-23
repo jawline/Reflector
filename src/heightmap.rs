@@ -17,9 +17,6 @@ pub struct Heightmap<T: Clone + Copy> {
     pub width: usize,
     pub height: usize,
     pub scale_z: f32,
-
-    // We keep track of this so we can scale the stl or 3D models
-    pub pixels_per_distance_unit: f32,
 }
 
 impl<T: Clone + Copy> Heightmap<T> {
@@ -36,7 +33,6 @@ impl<T: Clone + Copy> Heightmap<T> {
             data: flipped,
             width: self.width,
             height: self.height,
-            pixels_per_distance_unit: self.pixels_per_distance_unit,
             scale_z: self.scale_z,
         }
     }
@@ -343,7 +339,6 @@ impl Heightmap<Option<f32>> {
             data: grid_zones_smoothed,
             width: self.width,
             height: self.height,
-            pixels_per_distance_unit: self.pixels_per_distance_unit,
             scale_z: self.scale_z,
         }
     }
@@ -364,7 +359,6 @@ impl Heightmap<Option<f32>> {
                 .collect(),
             width: self.width,
             height: self.height,
-            pixels_per_distance_unit: self.pixels_per_distance_unit,
             scale_z: self.scale_z,
         }
     }
@@ -402,8 +396,36 @@ impl Heightmap<Option<f32>> {
                 .collect(),
             width: self.width,
             height: self.height,
-            pixels_per_distance_unit: self.pixels_per_distance_unit,
             scale_z: delta,
+        }
+    }
+
+    pub fn of_nan_as_none(old: Heightmap<f32>) -> Self {
+        Self {
+            data: old
+                .data
+                .into_iter()
+                .map(|x| if x.is_nan() { None } else { Some(x) })
+                .collect(),
+            width: old.width,
+            height: old.height,
+            scale_z: old.scale_z,
+        }
+    }
+
+    pub fn into_nan_as_none(self: Heightmap<Option<f32>>) -> Heightmap<f32> {
+        Heightmap {
+            data: self
+                .data
+                .into_iter()
+                .map(|x| match x {
+                    Some(x) => x,
+                    None => f32::NAN,
+                })
+                .collect(),
+            width: self.width,
+            height: self.height,
+            scale_z: self.scale_z,
         }
     }
 
@@ -446,7 +468,6 @@ impl Heightmap<u8> {
             data,
             width: self.width,
             height: self.height,
-            pixels_per_distance_unit: self.pixels_per_distance_unit,
             scale_z: 1.,
         }
     }
@@ -475,7 +496,6 @@ impl Heightmap<f32> {
             data,
             width: self.width,
             height: self.height,
-            pixels_per_distance_unit: self.pixels_per_distance_unit,
             scale_z: 1.,
         }
     }
@@ -485,7 +505,6 @@ impl Heightmap<f32> {
             data: self.data.iter().map(|x| x + depth).collect(),
             width: self.width,
             height: self.height,
-            pixels_per_distance_unit: self.pixels_per_distance_unit,
             scale_z: self.scale_z,
         }
     }
@@ -499,7 +518,6 @@ impl Heightmap<f32> {
             data: self.data.iter().map(|x| x / max_z).collect(),
             width: self.width,
             height: self.height,
-            pixels_per_distance_unit: self.pixels_per_distance_unit,
             scale_z: max_z,
         }
     }
@@ -509,7 +527,6 @@ impl Heightmap<f32> {
             data: self.data.iter().map(|x| f(*x)).collect(),
             width: self.width,
             height: self.height,
-            pixels_per_distance_unit: self.pixels_per_distance_unit,
             scale_z: self.scale_z,
         }
     }
@@ -522,7 +539,6 @@ pub struct StreamingHeightmap {
     ext_x: usize,
     ext_y: usize,
     limits: Limits,
-    pixels_per_distance_unit: f32,
 }
 
 impl StreamingHeightmap {
@@ -542,7 +558,6 @@ impl StreamingHeightmap {
             ext_y,
             limits: limits.clone(),
             grid_zones,
-            pixels_per_distance_unit,
         }
     }
 
@@ -570,7 +585,6 @@ impl StreamingHeightmap {
             data: grid_zones,
             width: self.ext_x,
             height: self.ext_y,
-            pixels_per_distance_unit: self.pixels_per_distance_unit,
             scale_z: 1.,
         }
     }

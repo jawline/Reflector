@@ -1,11 +1,12 @@
 use clap::Parser;
-use log::{error, warn, info};
+use log::{error, info, warn};
 use rust_las_printer::heightmap::{Heightmap, InterpolationMode, StreamingHeightmap};
 use rust_las_printer::las_data::{load_from_directory, LasType, Limits};
 use rust_las_printer::to_3d_model::Model;
 use rust_las_printer::to_stl::to_stl;
+use serde_pickle::DeOptions;
 use std::{
-    fs::File,
+    fs::{read, File},
     io::{BufWriter, Write},
 };
 
@@ -113,36 +114,35 @@ fn main() {
 
     let args = Args::parse();
 
-    println!("First pass, collecting limits");
-    let limits = Limits::load_from_directory(
-        &args.las_folder_path,
-        args.max_threads,
-    );
-
-    info!(
-        "Bounds: {} {} {} {} {} {}",
-        limits.min_x, limits.max_x, limits.min_y, limits.max_y, limits.min_z, limits.max_z
-    );
-
-    println!("Main pass, summarizing grid squares");
-
-    let mut grid_zones = build_terrain_map(&limits, &args);
-    let buildings = build_building_map(&limits, &args);
-    merge(&mut grid_zones, &buildings);
-
-    info!("Flipping the Y axis");
-    let grid_zones = grid_zones.flip_y();
-
     let write_to = WriteTo::of_string(&args.write_to);
 
-    let proportion_of_empty_cells = grid_zones.proportion_of_empty_cells();
-    info!("Proportion of empty cells: {}", proportion_of_empty_cells);
-
-    if proportion_of_empty_cells > 0.5 {
-        warn!("BAD INPUT: With this upscaling, more than 50% of the pixels are none.");
-    }
-
     if write_to == WriteTo::UpscaleFmt {
+        info!("Producing a sample and preparing for upscaling");
+
+        info!("First pass, collecting limits");
+        let limits = Limits::load_from_directory(&args.las_folder_path, args.max_threads);
+
+        info!(
+            "Bounds: {} {} {} {} {} {}",
+            limits.min_x, limits.max_x, limits.min_y, limits.max_y, limits.min_z, limits.max_z
+        );
+
+        println!("Main pass, summarizing grid squares");
+
+        let mut grid_zones = build_terrain_map(&limits, &args);
+        let buildings = build_building_map(&limits, &args);
+        merge(&mut grid_zones, &buildings);
+
+        info!("Flipping the Y axis");
+        let grid_zones = grid_zones.flip_y();
+
+        let proportion_of_empty_cells = grid_zones.proportion_of_empty_cells();
+        info!("Proportion of empty cells: {}", proportion_of_empty_cells);
+
+        if proportion_of_empty_cells > 0.5 {
+            warn!("BAD INPUT: With this upscaling, more than 50% of the pixels are none.");
+        }
+
         if grid_zones.proportion_of_empty_cells() > 0.75 {
             error!("REJECTING INPUT DUE TO HIGH PROPORTION OF ERRORS");
         } else {
@@ -153,6 +153,11 @@ fn main() {
             grid_zones.serialize(file).unwrap();
         }
     } else {
+        let grid_zones = read(&args.las_folder_path).unwrap();
+        let grid_zones: Heightmap<f32> =
+            serde_pickle::from_slice(&grid_zones, DeOptions::new()).unwrap();
+        let grid_zones: Heightmap<Option<f32>> =
+            Heightmap::<Option<f32>>::of_nan_as_none(grid_zones);
         info!("Doing hole filling");
 
         let grid_zones =
@@ -180,7 +185,7 @@ fn main() {
                 stl_io::write_stl(&mut file, mesh.into_iter()).unwrap()
             }
             WriteTo::Bin => {
-                let file = File::create(args.output_path).unwrap();
+                let file = File::create(args.las_folder_path).unwrap();
                 let mut writer = BufWriter::new(file);
                 writer
                     .write(&postcard::to_stdvec::<Heightmap<f32>>(&grid_zones).unwrap())

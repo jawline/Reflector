@@ -113,12 +113,8 @@ where
 }
 
 // TODO: Refactor in terms of load_from_directory_points
-pub fn load_from_directory<F>(
-    path: &str,
-    max_threads: usize,
-    las_type: &LasType,
-    mut f: F,
-) where
+pub fn load_from_directory<F>(path: &str, max_threads: usize, las_type: &LasType, mut f: F)
+where
     F: FnMut(f32, f32, f32) -> (),
 {
     info!("Beginning iteration over all LAS data");

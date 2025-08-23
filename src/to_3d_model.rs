@@ -303,8 +303,7 @@ impl Model {
             uvs,
             indices,
         };
-        let model_scale_factor = (1. / heightmap.pixels_per_distance_unit) as f32;
-        result.scale((model_scale_factor, model_scale_factor, 1.));
+        result.scale((1., 1., heightmap.scale_z));
         result
     }
 }
