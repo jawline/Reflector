@@ -4,7 +4,7 @@ use rust_las_printer::heightmap::{Heightmap, InterpolationMode, StreamingHeightm
 use rust_las_printer::las_data::{load_from_directory, LasType, Limits};
 use rust_las_printer::to_3d_model::Model;
 use rust_las_printer::to_stl::to_stl;
-use serde_pickle::DeOptions;
+use serde_pickle::{DeOptions, SerOptions};
 use std::{
     fs::{read, File},
     io::{BufWriter, Write},
@@ -15,7 +15,6 @@ enum WriteTo {
     Bin,
     Stl,
     UpscaleFmt,
-    Png,
 }
 
 impl WriteTo {
@@ -25,7 +24,6 @@ impl WriteTo {
             "bin" => Bin,
             "stl" => Stl,
             "upscale" => UpscaleFmt,
-            "Png" => Png,
             _ => panic!("Unsupported WriteTo format"),
         }
     }
@@ -127,8 +125,10 @@ fn main() {
             limits.min_x, limits.max_x, limits.min_y, limits.max_y, limits.min_z, limits.max_z
         );
 
-        println!("Main pass, summarizing grid squares");
+        info!("Main pass, summarizing grid squares");
 
+        // Buildings always take precedent over any terrain in the same cell rather than taking the
+        // approximate median of the datapoints
         let mut grid_zones = build_terrain_map(&limits, &args);
         let buildings = build_building_map(&limits, &args);
         merge(&mut grid_zones, &buildings);
@@ -146,11 +146,11 @@ fn main() {
         if grid_zones.proportion_of_empty_cells() > 0.75 {
             error!("REJECTING INPUT DUE TO HIGH PROPORTION OF ERRORS");
         } else {
-            let file = File::create(args.output_path).unwrap();
+            let mut file = File::create(args.output_path).unwrap();
             let min_z = grid_zones.min_z();
             let max_z = grid_zones.max_z();
             let grid_zones = grid_zones.normalize_z_by(min_z, max_z);
-            grid_zones.serialize(file).unwrap();
+            serde_pickle::to_writer(&mut file, &grid_zones, SerOptions::new()).unwrap();
         }
     } else {
         let grid_zones = read(&args.las_folder_path).unwrap();
@@ -191,12 +191,7 @@ fn main() {
                     .write(&postcard::to_stdvec::<Heightmap<f32>>(&grid_zones).unwrap())
                     .unwrap();
             }
-            WriteTo::Png => {
-                let max_z = grid_zones.max_z();
-                let grid_zones = grid_zones.normalize_z_by(max_z).to_u8(args.max_y_is_low);
-                grid_zones.write_to_png(&args.output_path);
-            }
-            WriteTo::UpscaleFmt => unimplemented!(),
+            WriteTo::UpscaleFmt => unreachable!(),
         };
     }
 }
