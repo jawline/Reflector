@@ -59,7 +59,18 @@ def kl_loss(encoded_distribution, *, beta=None):
         torch.zeros_like(encoded_distribution.mean),
         torch.ones_like(encoded_distribution.log_var),
     )
-    return kl_divergence(q_dist, p_dist).sum() * beta
+
+    sample = encoded_distribution.sample()
+    log_qdist = q_dist.log_prob(sample)
+    log_pdist = p_dist.log_prob(sample)
+    kl_div = (log_qdist - log_pdist)
+
+    #print(kl_div.shape)
+
+    kl_div = kl_div.sum(-1).mean()
+    #print(kl_div.item())
+
+    return kl_div * beta
 
 
 def train_auto(
@@ -75,16 +86,25 @@ def train_auto(
 ):
     set_seed(random.randint(0, 2**32 - 1)) if seed == -1 else set_seed(seed)
     dataset_len = len(dataset)
-    dataset_per_epoch = dataset_len / batch_size 
+    dataset_per_epoch = dataset_len / batch_size
     train_loader = dataloader(dataset, batch_size)
     autoencoder, optimizer = model_loader.load_autoencoder(device, checkpoint_path, lr)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=100, factor=0.1, threshold=0.001)
+    scheduler = ReduceLROnPlateau(
+        optimizer, mode="min", patience=3, factor=0.1, threshold=0.001
+    )
 
     # https://medium.com/@rahuldasari7502/building-a-beta-variational-autoencoder-%CE%B2-vae-from-scratch-with-pytorch-c5896ecc4dee suggests MSELoss(reduction=mean) can underfit
     # when used with beta-VAE
     criterion = nn.MSELoss(reduction="sum")
 
+
     for i in range(num_epochs):
+
+
+        print("Optimizer state")
+        for param_group in optimizer.param_groups:
+            print(param_group['lr'])
+
         total_loss = 0
         total_kl_loss = 0
         total_output_loss = 0
@@ -95,31 +115,34 @@ def train_auto(
             for_train = datapoint["without_nan"].to(device, non_blocking=True)
             mask = datapoint["mask"].to(device, non_blocking=True)
 
+            # Set unknown fields to -1 in attempt to make unknown bad data distinct from known
+            # data.
+            for_train = (for_train * mask) + (-1 * logical_not(mask))
+
             encoded = autoencoder.encode(for_train * mask)
             decoded = autoencoder.decode(encoded.sample())
-            # We are using MSEloss 
+            # We are using MSEloss
             output_loss = criterion(decoded * mask, for_train * mask) / batch_size
-            kl_divergence_loss = kl_loss(encoded, beta=0.00001) / batch_size
+            kl_divergence_loss = kl_loss(encoded, beta=0.0001) 
 
-            loss = output_loss + kl_divergence_loss
+            loss = -(kl_divergence_loss - output_loss)
             loss.backward()
             optimizer.step()
 
             if (bidx % int(dataset_per_epoch // 100)) == 0:
-                print("Sample", bidx, kl_divergence_loss.item(), output_loss.item())
+                print("Sample", bidx, loss.item(), kl_divergence_loss.item(), output_loss.item())
 
             total_loss += loss.item()
             total_kl_loss += kl_divergence_loss.item()
             total_output_loss += output_loss.item()
 
             #display_reverse([
-            #    for_train.to("cpu")[0].unsqueeze(0).detach(),
-            #    decoded.to("cpu")[0].unsqueeze(0).detach(),
+            #   for_train.to("cpu")[0].unsqueeze(0).detach(),
+            #   decoded.to("cpu")[0].unsqueeze(0).detach(),
             #])
 
         avg_loss = total_loss / dataset_per_epoch
         scheduler.step(avg_loss)
-        
 
         print(
             f"Epoch {i + 1} | Loss {total_loss / (dataset_len / batch_size):.5f} {total_kl_loss / (dataset_len / batch_size):.5f} {total_output_loss / (dataset_len / batch_size):.5f} (Saved)"
