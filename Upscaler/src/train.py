@@ -61,6 +61,9 @@ def kl_loss(encoded_distribution, *, beta=None):
     )
 
     sample = encoded_distribution.sample()
+    print(encoded_distribution.mean.shape)
+    print(encoded_distribution.log_var.shape)
+    print(sample.shape)
     log_qdist = q_dist.log_prob(sample)
     log_pdist = p_dist.log_prob(sample)
     kl_div = (log_qdist - log_pdist)
@@ -136,10 +139,10 @@ def train_auto(
             total_kl_loss += kl_divergence_loss.item()
             total_output_loss += output_loss.item()
 
-            #display_reverse([
-            #   for_train.to("cpu")[0].unsqueeze(0).detach(),
-            #   decoded.to("cpu")[0].unsqueeze(0).detach(),
-            #])
+            display_reverse([
+               for_train.to("cpu")[0].unsqueeze(0).detach(),
+               decoded.to("cpu")[0].unsqueeze(0).detach(),
+            ])
 
         avg_loss = total_loss / dataset_per_epoch
         scheduler.step(avg_loss)

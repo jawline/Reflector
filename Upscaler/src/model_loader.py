@@ -12,7 +12,7 @@ from labml_nn.diffusion.stable_diffusion.model.autoencoder import (
 
 def create_autoencoder(device, lr):
     z_channels = 2048
-    emb_channels = 4
+    emb_channels = 8
     encoder = Encoder(
         in_channels=1,
         z_channels=z_channels,
