@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -uvx
 echo "Doing $1 to $2 using $3ppd"
+mkdir -p "$2"
 count=0
 IFS=$'\n'
 for file in `find "$1"  -type f -name "*.la*"`; do
-  to_name="$2/${count}.h3t"
+  to_name="$2/${count}.pre.pt"
   echo "Processing $file to $to_name"
-  RUST_LOG=info cargo run --release --bin converter -- --las-folder-path "$file" --output-path "$to_name" --pixels-per-unit-dim "$3" --write-to upscale
+  RUST_LOG=info cargo run --release --bin converter -- --las-folder-path "$file" --output-path "$to_name" --pixels-per-unit-dim "$3" --write-to upscale --max-threads 8
   count=$((count+1))
 done

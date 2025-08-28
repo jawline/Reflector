@@ -1,6 +1,7 @@
 import sys
 import torch
 import pickle
+from torch import tensor
 from train import train, train_auto
 from dataset import TerrainDataset
 from infer import (
@@ -8,8 +9,11 @@ from infer import (
     generative_inference,
     whole_datasource_tiled_inference,
 )
-from sample_loader import load_sample, prepare_tensor
 from constants import tile_width, tile_height
+from infer import display_reverse
+from math import nan
+from torch import isnan, logical_not, nan_to_num
+import preprocess
 
 
 def select_device():
@@ -57,14 +61,19 @@ def main():
         generative_inference(device=device, checkpoint_path=checkpoint)
     elif mode == "whole-frame":
         path = dataset
-        sample = load_sample(path)
+        print("Preparing")
 
-        src_frame, mask = prepare_tensor(
-            sample.tensor(0, 0, sample.width, sample.height)
-        )
+        sample = preprocess.load(path)
+        
+        without_nan = sample['without_nan'].unsqueeze(0).unsqueeze(0)
+        mask = sample['mask'].unsqueeze(0).unsqueeze(0)
+
+        print(without_nan.shape, mask.shape)
+
+        #display_reverse([without_nan, mask])
 
         inferred_frame = whole_datasource_tiled_inference(
-            src_frame,
+            without_nan,
             mask,
             tile_width,
             tile_height,
@@ -74,9 +83,9 @@ def main():
 
         result = {
             "data": inferred_frame.flatten().tolist(),
-            "width": sample.width,
-            "height": sample.height,
-            "scale_z": sample.scale_z,
+            "width": sample['width'],
+            "height": sample['height'],
+            "scale_z": sample['scale_z'],
         }
 
         with open("out.pt", "wb") as f:

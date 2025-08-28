@@ -30,6 +30,7 @@ png = "0.17.8"
 postcard = { version = "1.0.4", features = ["alloc", "use-std"] }
 quantiles = "0.7.1"
 quantogram = "0.4.4"
+remedian = "0.1.0"
 serde = "1.0.163"
 serde-pickle = "1.2.0"
 stl_io = "0.7.0"

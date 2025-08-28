@@ -11,11 +11,13 @@ from torch import (
     save,
     cat,
     rand,
+    rand_like,
     randn_like,
     logical_not,
     logical_or,
     logical_and,
     sqrt,
+    transpose
 )
 from torch.distributions import Normal
 from torch.distributions.kl import kl_divergence
@@ -27,7 +29,6 @@ from ddpm_scheduler import DDPM_Scheduler
 from unet import UNET
 from tqdm import tqdm
 from constants import num_time_steps
-from dataset import norm
 from infer import display_reverse
 
 
@@ -51,7 +52,7 @@ def dataloader(dataset, batch_size):
     )
 
 
-def kl_loss(encoded_distribution, *, beta=None):
+def kl_loss(encoded_distribution, sample, *, beta=None):
     q_dist = Normal(
         encoded_distribution.mean, torch.exp(0.5 * encoded_distribution.log_var)
     )
@@ -61,17 +62,14 @@ def kl_loss(encoded_distribution, *, beta=None):
     )
 
     sample = encoded_distribution.sample()
-    print(encoded_distribution.mean.shape)
-    print(encoded_distribution.log_var.shape)
-    print(sample.shape)
     log_qdist = q_dist.log_prob(sample)
     log_pdist = p_dist.log_prob(sample)
-    kl_div = (log_qdist - log_pdist)
+    kl_div = log_qdist - log_pdist
 
-    #print(kl_div.shape)
+    # print(kl_div.shape)
 
     kl_div = kl_div.sum(-1).mean()
-    #print(kl_div.item())
+    # print(kl_div.item())
 
     return kl_div * beta
 
@@ -100,13 +98,10 @@ def train_auto(
     # when used with beta-VAE
     criterion = nn.MSELoss(reduction="sum")
 
-
     for i in range(num_epochs):
-
-
         print("Optimizer state")
         for param_group in optimizer.param_groups:
-            print(param_group['lr'])
+            print(param_group["lr"])
 
         total_loss = 0
         total_kl_loss = 0
@@ -118,31 +113,59 @@ def train_auto(
             for_train = datapoint["without_nan"].to(device, non_blocking=True)
             mask = datapoint["mask"].to(device, non_blocking=True)
 
+            # Randomly choose to transpose the X,Y (We could during data generation rotate the entire tile before translating it to a heightmap, but that is trickier)
+            if random.choice([True, False]):
+                for_train = transpose(for_train, -1, -2)
+                mask = transpose(mask, -1, -2)
+
             # Set unknown fields to -1 in attempt to make unknown bad data distinct from known
             # data.
             for_train = (for_train * mask) + (-1 * logical_not(mask))
 
-            encoded = autoencoder.encode(for_train * mask)
-            decoded = autoencoder.decode(encoded.sample())
+            # Add some more noise to the image so the decoder can see some blank cells
+            additional_noise = rand_like(for_train) > random.uniform(0.05, 0.5)
+            for_autoencoder = (for_train * additional_noise) + (
+                -1 * logical_not(additional_noise)
+            )
+
+            encoded = autoencoder.encode(for_autoencoder * mask)
+            sample = encoded.sample()
+            decoded = autoencoder.decode(sample)
+
             # We are using MSEloss
             output_loss = criterion(decoded * mask, for_train * mask) / batch_size
-            kl_divergence_loss = kl_loss(encoded, beta=0.0001) 
+            kl_divergence_loss = kl_loss(encoded, sample, beta=0.001)
 
-            loss = -(kl_divergence_loss - output_loss)
+            loss = output_loss - torch.clamp(kl_divergence_loss, min=0)
             loss.backward()
             optimizer.step()
 
             if (bidx % int(dataset_per_epoch // 100)) == 0:
-                print("Sample", bidx, loss.item(), kl_divergence_loss.item(), output_loss.item())
+                print(
+                    "Sample",
+                    bidx,
+                    loss.item(),
+                    kl_divergence_loss.item(),
+                    output_loss.item(),
+                    sample.shape,
+                )
 
             total_loss += loss.item()
             total_kl_loss += kl_divergence_loss.item()
             total_output_loss += output_loss.item()
 
-            display_reverse([
-               for_train.to("cpu")[0].unsqueeze(0).detach(),
-               decoded.to("cpu")[0].unsqueeze(0).detach(),
-            ])
+            #for_train = for_train.to("cpu")[0].unsqueeze(0).detach()
+            #for_autoencoder = for_autoencoder.to("cpu")[0].unsqueeze(0).detach()
+            #decoded = decoded.to("cpu")[0].unsqueeze(0).detach()
+            #mask = mask.to("cpu")[0].unsqueeze(0).detach()
+            #reconstructed = (for_train * mask) + (decoded * logical_not(mask))
+            #display_reverse([
+            # for_train,
+            # mask,
+            # for_autoencoder,
+            # decoded,
+            # reconstructed
+            #])
 
         avg_loss = total_loss / dataset_per_epoch
         scheduler.step(avg_loss)
@@ -150,6 +173,9 @@ def train_auto(
         print(
             f"Epoch {i + 1} | Loss {total_loss / (dataset_len / batch_size):.5f} {total_kl_loss / (dataset_len / batch_size):.5f} {total_output_loss / (dataset_len / batch_size):.5f} (Saved)"
         )
+
+        if total_loss < 0:
+            raise Exception("Explosion - self terminating")
 
         checkpoint = {
             "autoencoder": autoencoder.state_dict(),

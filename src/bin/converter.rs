@@ -127,8 +127,9 @@ fn main() {
 
         info!("Main pass, summarizing grid squares");
 
-        // Buildings always take precedent over any terrain in the same cell rather than taking the
-        // approximate median of the datapoints
+        // We merge the medians for the buildings and the medians for terrain and then make sure
+        // the buildings take precedent. I have found this to be anecdotally better than just a
+        // median since you get less noisy data but don't end up with weird looking underpasses.
         let mut grid_zones = build_terrain_map(&limits, &args);
         let buildings = build_building_map(&limits, &args);
         merge(&mut grid_zones, &buildings);
@@ -154,10 +155,10 @@ fn main() {
         }
     } else {
         let grid_zones = read(&args.las_folder_path).unwrap();
-        let grid_zones: Heightmap<f32> =
-            serde_pickle::from_slice(&grid_zones, DeOptions::new()).unwrap();
         let grid_zones: Heightmap<Option<f32>> =
-            Heightmap::<Option<f32>>::of_nan_as_none(grid_zones);
+            serde_pickle::from_slice(&grid_zones, DeOptions::new()).unwrap();
+        //let grid_zones: Heightmap<Option<f32>> =
+        //    Heightmap::<Option<f32>>::of_nan_as_none(grid_zones);
         info!("Doing hole filling");
 
         let grid_zones =

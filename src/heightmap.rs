@@ -1,9 +1,9 @@
 use crate::las_data::Limits;
 use itertools::iproduct;
 use log::info;
-use quantiles::ckms::CKMS;
 use serde::{Deserialize, Serialize};
 use std::ops::{Index, IndexMut};
+use remedian::RemedianBlock;
 
 #[derive(Serialize, Deserialize)]
 pub struct Heightmap<T: Clone + Copy> {
@@ -299,7 +299,7 @@ impl Heightmap<f32> {
 }
 
 pub struct StreamingHeightmap {
-    grid_zones: Vec<CKMS<f32>>,
+    grid_zones: Vec<RemedianBlock<f32>>,
     grid_x: usize,
     grid_y: usize,
     ext_x: usize,
@@ -316,7 +316,7 @@ impl StreamingHeightmap {
         let ext_x = grid_x + 1;
         let ext_y = grid_y + 1;
         let mut grid_zones = Vec::new();
-        grid_zones.resize_with(ext_x * ext_y, || CKMS::new(0.1));
+        grid_zones.resize_with(ext_x * ext_y, || RemedianBlock::default());
         Self {
             grid_x,
             grid_y,
@@ -333,7 +333,7 @@ impl StreamingHeightmap {
         let grid_x = (x_ratio * self.grid_x as f32).floor() as usize;
         let grid_y = (y_ratio * self.grid_y as f32).floor() as usize;
         let zone = &mut self.grid_zones[(grid_y * self.ext_x) + grid_x];
-        zone.insert(pz);
+        zone.add_sample_point(pz);
     }
 
     pub fn finalize(&self) -> Heightmap<Option<f32>> {
@@ -342,7 +342,7 @@ impl StreamingHeightmap {
         let grid_zones: Vec<Option<f32>> = self
             .grid_zones
             .iter()
-            .map(|grid_zone| grid_zone.query(0.5).map(|(_c, t)| t))
+            .map(|grid_zone| grid_zone.median())
             .collect();
 
         info!("Summarized grid zones");

@@ -18,6 +18,7 @@ from torch import (
     logical_or,
     logical_not,
     rand,
+    rand_like,
     randn,
     randn_like,
     sqrt,
@@ -26,7 +27,7 @@ from torch import (
 )
 from torch.nn.functional import pad
 from constants import num_time_steps, tile_width, tile_height
-from dataset import norm, unnorm
+import preprocess
 
 
 def display_reverse(images: List):
@@ -62,57 +63,26 @@ def combine_with_src_frame(src_frame, src_mask, frame):
 
 
 def infer_frame(
-    device, src_frame, src_mask, model, scheduler, num_time_steps, sample_times
+    device, src_frame, src_mask, model, num_time_steps, sample_times
 ):
     images = []
 
     images.append(src_frame * src_mask)
 
-    src_frame, min_value, max_value = norm(src_frame, src_mask)
+    src_frame, min_value, max_value = preprocess.norm(src_frame, src_mask)
 
     src_frame = src_frame.to(device)
     src_mask = src_mask.to(device)
 
-    guess_mask = (logical_not(src_mask)).to(device)
-    masked_src_frame = (src_frame * src_mask) + (
-        randn_like(src_frame).to(device) * guess_mask
-    )
+    encoded = model.encode((src_frame * src_mask) + (-1 * logical_not(src_mask)))
+    sample = encoded.sample()
+    decoded = model.decode(sample)
 
-    images.append(masked_src_frame.to("cpu"))
+    # TODO: Exclusively use the predicted frame as an option rather than combining it with the origin frame
 
-    for which_step in tqdm(
-        reversed(range(0, num_time_steps)), desc=f"Infer Step {num_time_steps}"
-    ):
-        masked_src_frame = combine_with_src_frame(
-            infer_noise_mask(device, scheduler, src_frame, src_mask, which_step),
-            src_mask,
-            masked_src_frame,
-        )
-        masked_src_frame = step(device, masked_src_frame, model, scheduler, which_step)
+    #display_reverse([src_frame.to("cpu"), a_little_noise.to("cpu"), src_mask.to("cpu"), decoded.to("cpu")])
 
-        # Add some noise back into the image
-        if which_step != 0:
-            # TODO: which_step or which_step - 1
-            e = randn_like(src_frame).to(device)
-            # print("beta", scheduler.beta[[which_step]], sqrt(scheduler.beta[[which_step]]))
-            beta = sqrt(scheduler.beta[[which_step]]).to(device)
-            masked_src_frame = masked_src_frame + (e * beta)
-
-        masked_src_frame = (masked_src_frame * guess_mask) + (src_frame * src_mask)
-        if which_step in sample_times:
-            images.append(masked_src_frame.to("cpu"))
-
-    masked_src_frame = step(device, masked_src_frame.to(device), model, scheduler, 0)
-    masked_src_frame = combine_with_src_frame(src_frame, src_mask, masked_src_frame)
-
-    images.append(masked_src_frame.to("cpu"))
-
-    masked_src_frame = unnorm(
-        masked_src_frame, min_value.to(device), max_value.to(device)
-    )
-
-    images.append(masked_src_frame.to("cpu"))
-    return images
+    return preprocess.unnorm(decoded, min_value, max_value)
 
 
 def masked_inference(
@@ -218,7 +188,7 @@ def compute_distance_mask(src_mask):
 
 def compute_threshold(src_mask):
     avg_dim = (src_mask.shape[0] + src_mask.shape[1]) / 2
-    return ceil(avg_dim * 0.03)
+    return ceil(avg_dim * 0.1)
 
 
 # We don't want to infill everything - some regions like large bodies of water
@@ -233,7 +203,7 @@ def compute_infill_keep_mask(src_mask):
 
 
 # To improve output we make sure we overlap some of the rows and columns with previous inferences during the tiled inference
-tile_overlap = 8
+tile_overlap = 0
 
 
 def whole_datasource_tiled_inference(
@@ -246,13 +216,14 @@ def whole_datasource_tiled_inference(
     num_time_steps: int = num_time_steps,
     ema_decay: float = 0.9999,
 ):
-    ema, scheduler = prepare_model(device, checkpoint_path, ema_decay, num_time_steps)
-    model = ema.module.eval()
+    autoencoder, _optimizer = model_loader.load_autoencoder(device, checkpoint_path, 0.1)
     times = []
 
     with no_grad():
         print("Starting to compute infill mask")
-        keep_mask = compute_infill_keep_mask(src_mask)
+        print(src_mask.shape)
+        #keep_mask = compute_infill_keep_mask(src_mask[0][0]).reshape(src_mask.shape)
+        keep_mask = torch.ones(src_frame.shape) * logical_not(src_mask)
 
         print("Computed infill mask")
 
@@ -260,11 +231,11 @@ def whole_datasource_tiled_inference(
 
         # Roughly, split the full heightmap up into chunks of kernel width and height, then for each
         # chunk compute the keep and tile masks. If the number of pixels we want to infer data for is non zero then run an inference and combine the result using the keep mask, otherwise preserve the old data and skip inference.
-        for start_y in range(0, src_frame.shape[0], kernel_height - tile_overlap):
+        for start_y in range(0, src_frame.shape[-2], kernel_height - tile_overlap):
             print("Starting new row inference")
             x_tiles = []
 
-            for start_x in range(0, src_frame.shape[1], kernel_width - tile_overlap):
+            for start_x in range(0, src_frame.shape[-1], kernel_width - tile_overlap):
                 # TODO: Rather than this we could combine all the images into a tensor and then use chunks
                 end_y = start_y + kernel_height
                 end_x = start_x + kernel_width
@@ -273,20 +244,20 @@ def whole_datasource_tiled_inference(
                     f"Starting part shapes {src_frame.shape} {keep_mask.shape} {start_x} {end_x} {start_y} {end_y}"
                 )
 
-                tile_data = src_frame[start_y:end_y, start_x:end_x].contiguous()
+                tile_data = src_frame[:,:,start_y:end_y, start_x:end_x].contiguous()
 
                 tile_mask = (
-                    src_mask[start_y:end_y, start_x:end_x].contiguous().to(device)
+                        src_mask[:,:,start_y:end_y, start_x:end_x].contiguous().to(device)
                 )
 
-                tile_keep_mask = keep_mask[start_y:end_y, start_x:end_x].contiguous()
+                tile_keep_mask = keep_mask[:,:,start_y:end_y, start_x:end_x].contiguous()
 
                 print(
                     f"extracted tiles {tile_data.shape} {tile_mask.shape} {tile_keep_mask.shape}"
                 )
 
-                pad_y = kernel_height - tile_data.shape[0]
-                pad_x = kernel_width - tile_data.shape[1]
+                pad_y = kernel_height - tile_data.shape[-2]
+                pad_x = kernel_width - tile_data.shape[-1]
                 pad_amt = (0, pad_x, 0, pad_y)
                 print(f"padding {pad_x}, {pad_y} {tile_data.shape}")
                 tile_data = pad(tile_data, pad_amt, "constant", 0.0)
@@ -317,13 +288,13 @@ def whole_datasource_tiled_inference(
                         device,
                         tile_data.reshape((1, 1, kernel_width, kernel_height)),
                         tile_mask.reshape((1, 1, kernel_width, kernel_height)),
-                        model,
-                        scheduler,
+                        autoencoder,
                         num_time_steps,
                         times,
-                    )[-1]
+                    )
 
-                    inference = inference.reshape((kernel_width, kernel_height))
+                
+                    print("inference", inference.shape)
 
                     # We use the keep mask here to avoid it damaging inference, since the values are None
                     # and do need prediction but we don't actually want to keep them in our result.
@@ -334,24 +305,32 @@ def whole_datasource_tiled_inference(
                         inference.shape,
                     )
                     new_tile = combine_with_src_frame(
-                        tile_data, logical_not(tile_keep_mask), inference.to(device)
+                        tile_data, logical_not(tile_keep_mask), inference
                     )
+                    print("Tile shape", new_tile.shape)
                 else:
                     print(f"Skipping tile")
 
                 # Remove the tile overlap
                 if start_x != 0:
-                    new_tile = new_tile[:, tile_overlap:]
+                    new_tile = new_tile[:, :, :, tile_overlap:]
 
                 if start_y != 0:
-                    new_tile = new_tile[tile_overlap:, :]
+                    new_tile = new_tile[:, :, tile_overlap:, :]
 
-                x_tiles.append(new_tile)
+                print(new_tile.shape)
+                print("tile", new_tile.shape)
+                x_tiles.append(new_tile.squeeze(0).squeeze(0))
 
             y_tiles.append(cat(x_tiles, dim=1))
 
-        result = cat(y_tiles, dim=0)[0 : src_frame.shape[0], 0 : src_frame.shape[1]]
-        src_shape = (1, 1, src_frame.shape[0], src_frame.shape[1])
+        src_shape = src_frame.shape
+        print("tile shape", y_tiles[0].shape)
+        result = cat(y_tiles, dim=0).unsqueeze(0).unsqueeze(0)
+        print("result pre trunc", result.shape)
+        result = result[:,:,0:src_frame.shape[-2], 0:src_frame.shape[-1]]
+        print("post trunc", result.shape)
+
         display_reverse(
             [
                 src_frame.reshape(src_shape).to("cpu"),

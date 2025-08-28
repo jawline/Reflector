@@ -11,26 +11,31 @@ from labml_nn.diffusion.stable_diffusion.model.autoencoder import (
 
 
 def create_autoencoder(device, lr):
-    z_channels = 2048
-    emb_channels = 8
+    z_channels = 512
+    emb_channels = 4
+
     encoder = Encoder(
         in_channels=1,
         z_channels=z_channels,
         channels=32,
-        channel_multipliers=[4, 2, 8, 8, 2],
+        channel_multipliers=[4, 2, 2],
         n_resnet_blocks=1,
     ).to(device)
+
     decoder = Decoder(
         out_channels=1,
         z_channels=z_channels,
         channels=32,
-        channel_multipliers=[4, 2, 8, 8, 2],
+        channel_multipliers=[4, 2, 2],
         n_resnet_blocks=1,
     ).to(device)
+
     optimizer = Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=lr)
+
     autoencoder = Autoencoder(
         encoder, decoder, emb_channels=emb_channels, z_channels=z_channels
     ).to(device)
+
     return autoencoder, optimizer
 
 
