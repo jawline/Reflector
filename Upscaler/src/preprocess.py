@@ -121,8 +121,6 @@ class TerrainDatasetSlow(Dataset):
         sample = load(self.files[idx])
         without_nan = tensor([])
         mask = tensor([])
-        min_values = nan
-        max_values = nan
         attempts = 0
 
         # To avoid raising, instead expect the caller to check broken before serializing
@@ -137,18 +135,8 @@ class TerrainDatasetSlow(Dataset):
                 broken = True
                 self.broken.add(self.files[idx])
 
-        if not broken:
-            # Pre-normalize the inputs
-            without_nan = without_nan.reshape((1, 1, self.sample_x, self.sample_y))
-            mask = mask.reshape(without_nan.shape)
-            without_nan, max_values, min_values = norm(without_nan, mask)
-            without_nan = without_nan.reshape((self.sample_x, self.sample_y))
-            mask = mask.reshape(without_nan.shape)
-
         return {
-            "mask": mask,
             "without_nan": without_nan,
-            "min_values": min_values,
-            "max_values": max_values,
+            "mask": mask,
             "broken": broken,
         }

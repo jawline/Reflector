@@ -30,6 +30,7 @@ from unet import UNET
 from tqdm import tqdm
 from constants import num_time_steps
 from infer import display_reverse
+from preprocess import unnorm
 
 
 def set_seed(seed: int = 42):
@@ -118,27 +119,38 @@ def train_auto(
                 for_train = transpose(for_train, -1, -2)
                 mask = transpose(mask, -1, -2)
 
-            # Set unknown fields to -1 in attempt to make unknown bad data distinct from known
-            # data.
-            for_train = (for_train * mask) + (-1 * logical_not(mask))
-
+            # Generate a bunch of randon numbers (batch_size,) between 0 and 1 for a known noise addition
             # Add some more noise to the image so the decoder can see some blank cells
-            additional_noise = rand_like(for_train) > random.uniform(0.05, 0.5)
-            for_autoencoder = (for_train * additional_noise) + (
-                -1 * logical_not(additional_noise)
+            batch_noise = (0.01 + (rand((batch_size, 1, 1, 1)) * 0.8)).to(device) # Between 1% and 81% total noise
+
+            additional_noise = rand_like(for_train) > batch_noise
+            total_mask = logical_and(mask, additional_noise)
+
+            for_autoencoder = (for_train * total_mask) + (
+                randn_like(for_train) * logical_not(total_mask)
             )
 
-            encoded = autoencoder.encode(for_autoencoder * mask)
+            encoded = autoencoder.encode(for_autoencoder)
             sample = encoded.sample()
             decoded = autoencoder.decode(sample)
+            reconstructed = (for_train * mask) + (logical_not(mask) * decoded)
 
             # We are using MSEloss
             output_loss = criterion(decoded * mask, for_train * mask) / batch_size
-            kl_divergence_loss = kl_loss(encoded, sample, beta=0.001)
+            kl_divergence_loss = kl_loss(encoded, sample, beta=0.0001)
 
-            loss = output_loss - torch.clamp(kl_divergence_loss, min=0)
+            loss = output_loss
+            if kl_divergence_loss < output_loss:
+                #print(output_loss, kl_divergence_loss)
+                loss = output_loss - kl_divergence_loss
+
             loss.backward()
             optimizer.step()
+
+
+            total_loss += loss.item()
+            total_kl_loss += kl_divergence_loss.item()
+            total_output_loss += output_loss.item()
 
             if (bidx % int(dataset_per_epoch // 100)) == 0:
                 print(
@@ -150,22 +162,18 @@ def train_auto(
                     sample.shape,
                 )
 
-            total_loss += loss.item()
-            total_kl_loss += kl_divergence_loss.item()
-            total_output_loss += output_loss.item()
-
-            #for_train = for_train.to("cpu")[0].unsqueeze(0).detach()
-            #for_autoencoder = for_autoencoder.to("cpu")[0].unsqueeze(0).detach()
-            #decoded = decoded.to("cpu")[0].unsqueeze(0).detach()
-            #mask = mask.to("cpu")[0].unsqueeze(0).detach()
-            #reconstructed = (for_train * mask) + (decoded * logical_not(mask))
-            #display_reverse([
-            # for_train,
-            # mask,
-            # for_autoencoder,
-            # decoded,
-            # reconstructed
-            #])
+                for_train = for_train.to("cpu")[0].unsqueeze(0).detach()
+                for_autoencoder = for_autoencoder.to("cpu")[0].unsqueeze(0).detach()
+                decoded = decoded.to("cpu")[0].unsqueeze(0).detach()
+                mask = mask.to("cpu")[0].unsqueeze(0).detach()
+                reconstructed = reconstructed.to("cpu")[0].unsqueeze(0).detach()
+                display_reverse([
+                 for_train,
+                 mask,
+                 for_autoencoder,
+                 decoded,
+                 reconstructed
+                ], to_file=True)
 
         avg_loss = total_loss / dataset_per_epoch
         scheduler.step(avg_loss)

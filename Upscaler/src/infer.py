@@ -30,7 +30,7 @@ from constants import num_time_steps, tile_width, tile_height
 import preprocess
 
 
-def display_reverse(images: List):
+def display_reverse(images: List, to_file=False):
     fig, axes = plt.subplots(1, len(images), figsize=(10, 1))
     for i, ax in enumerate(axes.flat):
         x = images[i].squeeze(0)
@@ -38,7 +38,13 @@ def display_reverse(images: List):
         x = x.numpy()
         ax.imshow(x, vmin=0, vmax=1)
         ax.axis("off")
-    plt.show()
+
+
+    if to_file:
+        print("Rendered PNG")
+        plt.savefig("last.png", dpi=1200)
+    else:
+        plt.show()
 
 
 def prepare_model(device, checkpoint_path, ema_decay, num_time_steps):
@@ -65,11 +71,6 @@ def combine_with_src_frame(src_frame, src_mask, frame):
 def infer_frame(
     device, src_frame, src_mask, model, num_time_steps, sample_times
 ):
-    images = []
-
-    images.append(src_frame * src_mask)
-
-    src_frame, min_value, max_value = preprocess.norm(src_frame, src_mask)
 
     src_frame = src_frame.to(device)
     src_mask = src_mask.to(device)
@@ -82,7 +83,7 @@ def infer_frame(
 
     #display_reverse([src_frame.to("cpu"), a_little_noise.to("cpu"), src_mask.to("cpu"), decoded.to("cpu")])
 
-    return preprocess.unnorm(decoded, min_value, max_value)
+    return decoded
 
 
 def masked_inference(
