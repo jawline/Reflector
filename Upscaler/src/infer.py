@@ -245,27 +245,24 @@ def whole_datasource_tiled_inference(
                     f"Starting part shapes {src_frame.shape} {keep_mask.shape} {start_x} {end_x} {start_y} {end_y}"
                 )
 
-                tile_data = src_frame[:, :, start_y:end_y, start_x:end_x].contiguous()
+                # Whenever possible, we pad with real data from earlier in the frame rather than unknown values to make the
+                # model more stable.
+                pad_y = max(kernel_height - (src_frame.shape[-2] - start_y), 0)
+                pad_x = max(kernel_width - (src_frame.shape[-1] - start_x), 0)
+
+                tile_data = src_frame[:, :, start_y - pad_y :end_y, start_x - pad_x :end_x].contiguous()
 
                 tile_mask = (
-                    src_mask[:, :, start_y:end_y, start_x:end_x].contiguous().to(device)
+                    src_mask[:, :, start_y - pad_y :end_y, start_x - pad_x :end_x].contiguous().to(device)
                 )
 
                 tile_keep_mask = keep_mask[
-                    :, :, start_y:end_y, start_x:end_x
+                    :, :, start_y - pad_y :end_y, start_x - pad_x :end_x
                 ].contiguous()
 
                 print(
                     f"extracted tiles {tile_data.shape} {tile_mask.shape} {tile_keep_mask.shape}"
                 )
-
-                pad_y = kernel_height - tile_data.shape[-2]
-                pad_x = kernel_width - tile_data.shape[-1]
-                pad_amt = (0, pad_x, 0, pad_y)
-                print(f"padding {pad_x}, {pad_y} {tile_data.shape}")
-                tile_data = pad(tile_data, pad_amt, "constant", 0.0)
-                tile_mask = pad(tile_mask, pad_amt, "constant", False)
-                tile_keep_mask = pad(tile_keep_mask, pad_amt, "constant", False)
 
                 tile_data = tile_data.to(device)
                 tile_mask = tile_mask.to(device)
@@ -319,6 +316,11 @@ def whole_datasource_tiled_inference(
 
                 if start_y != 0:
                     new_tile = new_tile[:, :, tile_overlap:, :]
+
+
+
+                # Pad back into kernel size
+                new_tile = pad(new_tile[:,:,pad_y:,pad_x:], (0, pad_x, 0, pad_y), "constant", 0.0)
 
                 print(new_tile.shape)
                 print("tile", new_tile.shape)
