@@ -30,7 +30,7 @@ from constants import num_time_steps, tile_width, tile_height
 import preprocess
 
 
-def display_reverse(images: List, to_file=False):
+def display_reverse(images: List, to_file=None):
     fig, axes = plt.subplots(1, len(images), figsize=(10, 1))
     for i, ax in enumerate(axes.flat):
         x = images[i].squeeze(0)
@@ -39,10 +39,11 @@ def display_reverse(images: List, to_file=False):
         ax.imshow(x, vmin=0, vmax=1)
         ax.axis("off")
 
-
-    if to_file:
-        print("Rendered PNG")
-        plt.savefig("last.png", dpi=1200)
+    if to_file is not None:
+        path = f"{to_file}.png"
+        plt.savefig(path, dpi=1200)
+        plt.close()
+        print("Rendered PNG", path)
     else:
         plt.show()
 
@@ -68,10 +69,7 @@ def combine_with_src_frame(src_frame, src_mask, frame):
     return (src_frame * src_mask) + (frame * logical_not(src_mask))
 
 
-def infer_frame(
-    device, src_frame, src_mask, model, num_time_steps, sample_times
-):
-
+def infer_frame(device, src_frame, src_mask, model, num_time_steps, sample_times):
     src_frame = src_frame.to(device)
     src_mask = src_mask.to(device)
 
@@ -81,7 +79,7 @@ def infer_frame(
 
     # TODO: Exclusively use the predicted frame as an option rather than combining it with the origin frame
 
-    #display_reverse([src_frame.to("cpu"), a_little_noise.to("cpu"), src_mask.to("cpu"), decoded.to("cpu")])
+    # display_reverse([src_frame.to("cpu"), a_little_noise.to("cpu"), src_mask.to("cpu"), decoded.to("cpu")])
 
     return decoded
 
@@ -217,13 +215,15 @@ def whole_datasource_tiled_inference(
     num_time_steps: int = num_time_steps,
     ema_decay: float = 0.9999,
 ):
-    autoencoder, _optimizer = model_loader.load_autoencoder(device, checkpoint_path, 0.1)
+    autoencoder, _optimizer = model_loader.load_autoencoder(
+        device, checkpoint_path, 0.1
+    )
     times = []
 
     with no_grad():
         print("Starting to compute infill mask")
         print(src_mask.shape)
-        #keep_mask = compute_infill_keep_mask(src_mask[0][0]).reshape(src_mask.shape)
+        # keep_mask = compute_infill_keep_mask(src_mask[0][0]).reshape(src_mask.shape)
         keep_mask = torch.ones(src_frame.shape) * logical_not(src_mask)
 
         print("Computed infill mask")
@@ -245,13 +245,15 @@ def whole_datasource_tiled_inference(
                     f"Starting part shapes {src_frame.shape} {keep_mask.shape} {start_x} {end_x} {start_y} {end_y}"
                 )
 
-                tile_data = src_frame[:,:,start_y:end_y, start_x:end_x].contiguous()
+                tile_data = src_frame[:, :, start_y:end_y, start_x:end_x].contiguous()
 
                 tile_mask = (
-                        src_mask[:,:,start_y:end_y, start_x:end_x].contiguous().to(device)
+                    src_mask[:, :, start_y:end_y, start_x:end_x].contiguous().to(device)
                 )
 
-                tile_keep_mask = keep_mask[:,:,start_y:end_y, start_x:end_x].contiguous()
+                tile_keep_mask = keep_mask[
+                    :, :, start_y:end_y, start_x:end_x
+                ].contiguous()
 
                 print(
                     f"extracted tiles {tile_data.shape} {tile_mask.shape} {tile_keep_mask.shape}"
@@ -294,7 +296,6 @@ def whole_datasource_tiled_inference(
                         times,
                     )
 
-                
                     print("inference", inference.shape)
 
                     # We use the keep mask here to avoid it damaging inference, since the values are None
@@ -329,7 +330,7 @@ def whole_datasource_tiled_inference(
         print("tile shape", y_tiles[0].shape)
         result = cat(y_tiles, dim=0).unsqueeze(0).unsqueeze(0)
         print("result pre trunc", result.shape)
-        result = result[:,:,0:src_frame.shape[-2], 0:src_frame.shape[-1]]
+        result = result[:, :, 0 : src_frame.shape[-2], 0 : src_frame.shape[-1]]
         print("post trunc", result.shape)
 
         display_reverse(

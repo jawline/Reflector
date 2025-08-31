@@ -71,7 +71,6 @@ class TerrainDatasetSlow(Dataset):
         print("Loading", len(files), " files")
         num_files = len(files)
         for i, path in tqdm(enumerate(files), desc=f"Num Files {num_files}"):
-
             try:
                 with open(path, "rb") as file:
                     data = pickle.load(file)

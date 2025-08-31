@@ -17,7 +17,8 @@ from torch import (
     logical_or,
     logical_and,
     sqrt,
-    transpose
+    transpose,
+    randperm,
 )
 from torch.distributions import Normal
 from torch.distributions.kl import kl_divergence
@@ -75,6 +76,17 @@ def kl_loss(encoded_distribution, sample, *, beta=None):
     return kl_div * beta
 
 
+# Mixes the noise from other entries in the batch so we get a realistic but lossable missing data
+# The mask of each entry in a batch is mixed with the mask from a different entry in the same batch
+def apply_batch_noise(masks, count):
+    for i in range(0, count):
+        idx = randperm(masks.shape[0], device=masks.device)
+        shuffled = masks.index_select(0, idx)
+        masks = logical_and(masks, shuffled)
+
+    return masks
+
+
 def train_auto(
     dataset,
     batch_size: int = 8,
@@ -92,12 +104,23 @@ def train_auto(
     train_loader = dataloader(dataset, batch_size)
     autoencoder, optimizer = model_loader.load_autoencoder(device, checkpoint_path, lr)
     scheduler = ReduceLROnPlateau(
-        optimizer, mode="min", patience=3, factor=0.1, threshold=0.001
+        optimizer, mode="min", patience=0, factor=0.1, threshold=0.001
     )
 
     # https://medium.com/@rahuldasari7502/building-a-beta-variational-autoencoder-%CE%B2-vae-from-scratch-with-pytorch-c5896ecc4dee suggests MSELoss(reduction=mean) can underfit
     # when used with beta-VAE
     criterion = nn.MSELoss(reduction="sum")
+
+    #for param_group in optimizer.param_groups:
+    #    param_group['lr'] = param_group['lr'] * 0.1
+
+    def checkpoint():
+        checkpoint = {
+            "autoencoder": autoencoder.state_dict(),
+            "optimizer": optimizer.state_dict(),
+        }
+        save(checkpoint, checkpoint_path)
+        print("Saved checkpoint to", checkpoint_path)
 
     for i in range(num_epochs):
         print("Optimizer state")
@@ -119,15 +142,22 @@ def train_auto(
                 for_train = transpose(for_train, -1, -2)
                 mask = transpose(mask, -1, -2)
 
-            # Generate a bunch of randon numbers (batch_size,) between 0 and 1 for a known noise addition
-            # Add some more noise to the image so the decoder can see some blank cells
-            batch_noise = (0.01 + (rand((batch_size, 1, 1, 1)) * 0.8)).to(device) # Between 1% and 81% total noise
+            # Take a random element from the batch and combine its missing data with our own so that we incorporate some real loooking missing data into our own input
+            batch_noise = apply_batch_noise(mask, count=random.randint(1, 2))
 
-            additional_noise = rand_like(for_train) > batch_noise
-            total_mask = logical_and(mask, additional_noise)
+            # Generate a bunch of random numbers (batch_size,) between 0 and 1 for a known noise addition
+            # Add some more noise to the image so the decoder can see some blank cells
+            min_noise = 0.01
+            max_noise = 0.1
+            noise_thresh_per_batch_elt = (
+                min_noise + (rand((batch_size, 1, 1, 1)) * (max_noise - min_noise))
+            ).to(device)  
+            additional_noise = rand_like(for_train) > noise_thresh_per_batch_elt
+
+            total_mask = logical_and(batch_noise, additional_noise)
 
             for_autoencoder = (for_train * total_mask) + (
-                randn_like(for_train) * logical_not(total_mask)
+                -1 * logical_not(total_mask)
             )
 
             encoded = autoencoder.encode(for_autoencoder)
@@ -135,18 +165,16 @@ def train_auto(
             decoded = autoencoder.decode(sample)
             reconstructed = (for_train * mask) + (logical_not(mask) * decoded)
 
-            # We are using MSEloss
             output_loss = criterion(decoded * mask, for_train * mask) / batch_size
             kl_divergence_loss = kl_loss(encoded, sample, beta=0.0001)
 
             loss = output_loss
             if kl_divergence_loss < output_loss:
-                #print(output_loss, kl_divergence_loss)
+                # print(output_loss, kl_divergence_loss)
                 loss = output_loss - kl_divergence_loss
 
             loss.backward()
             optimizer.step()
-
 
             total_loss += loss.item()
             total_kl_loss += kl_divergence_loss.item()
@@ -159,21 +187,24 @@ def train_auto(
                     loss.item(),
                     kl_divergence_loss.item(),
                     output_loss.item(),
+                    for_train.shape[0],
                     sample.shape,
                 )
 
-                for_train = for_train.to("cpu")[0].unsqueeze(0).detach()
-                for_autoencoder = for_autoencoder.to("cpu")[0].unsqueeze(0).detach()
-                decoded = decoded.to("cpu")[0].unsqueeze(0).detach()
-                mask = mask.to("cpu")[0].unsqueeze(0).detach()
-                reconstructed = reconstructed.to("cpu")[0].unsqueeze(0).detach()
-                display_reverse([
-                 for_train,
-                 mask,
-                 for_autoencoder,
-                 decoded,
-                 reconstructed
-                ], to_file=True)
+                checkpoint()
+
+                for elt in range(0, for_train.shape[0]):
+                    dec_for_train = for_train.to("cpu")[elt].unsqueeze(0).detach()
+                    dec_for_autoencoder = for_autoencoder.to("cpu")[elt].unsqueeze(0).detach()
+                    dec_decoded = decoded.to("cpu")[elt].unsqueeze(0).detach()
+                    dec_mask = mask.to("cpu")[elt].unsqueeze(0).detach()
+                    dec_reconstructed = reconstructed.to("cpu")[elt].unsqueeze(0).detach()
+                    display_reverse(
+                        [dec_for_train, dec_mask, dec_for_autoencoder, dec_decoded, dec_reconstructed],
+                        to_file=elt,
+                    )
+
+
 
         avg_loss = total_loss / dataset_per_epoch
         scheduler.step(avg_loss)
@@ -185,12 +216,7 @@ def train_auto(
         if total_loss < 0:
             raise Exception("Explosion - self terminating")
 
-        checkpoint = {
-            "autoencoder": autoencoder.state_dict(),
-            "optimizer": optimizer.state_dict(),
-        }
-
-        save(checkpoint, checkpoint_path)
+        checkpoint()
 
 
 def train(

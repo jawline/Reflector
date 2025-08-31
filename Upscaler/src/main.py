@@ -64,13 +64,13 @@ def main():
         print("Preparing")
 
         sample = preprocess.load(path)
-        
-        without_nan = sample['without_nan'].unsqueeze(0).unsqueeze(0)
-        mask = sample['mask'].unsqueeze(0).unsqueeze(0)
+
+        without_nan = sample["without_nan"].unsqueeze(0).unsqueeze(0)
+        mask = sample["mask"].unsqueeze(0).unsqueeze(0)
 
         print(without_nan.shape, mask.shape)
 
-        #display_reverse([without_nan, mask])
+        # display_reverse([without_nan, mask])
 
         inferred_frame = whole_datasource_tiled_inference(
             without_nan,
@@ -83,9 +83,9 @@ def main():
 
         result = {
             "data": inferred_frame.flatten().tolist(),
-            "width": sample['width'],
-            "height": sample['height'],
-            "scale_z": sample['scale_z'],
+            "width": sample["width"],
+            "height": sample["height"],
+            "scale_z": sample["scale_z"],
         }
 
         with open("out.pt", "wb") as f:
