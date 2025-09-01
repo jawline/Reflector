@@ -81,10 +81,12 @@ def main():
             checkpoint_path=checkpoint,
         )
 
+        print(inferred_frame.shape)
+
         result = {
             "data": inferred_frame.flatten().tolist(),
-            "width": sample["width"],
-            "height": sample["height"],
+            "width": inferred_frame.shape[-1],
+            "height": inferred_frame.shape[-2],
             "scale_z": sample["scale_z"],
         }
 

@@ -24,7 +24,7 @@ impl LasType {
             LasType::Ground => match classification {
                 // TODO: Make this customizable - I've found anecodtally that depending on dataset
                 // ground is often classified as low / medium vegetation
-                Ground |  ModelKeyPoint | LowPoint  | CreatedNeverClassified | Unclassified => true,
+                Ground  => true,
                 _ => false,
             },
             LasType::Buildings => match classification {

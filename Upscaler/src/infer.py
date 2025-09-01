@@ -27,7 +27,13 @@ from torch import (
 )
 from torch.nn.functional import pad
 from constants import num_time_steps, tile_width, tile_height
+from torchvision.transforms.v2 import Resize
 import preprocess
+
+
+def aa(tensor):
+    resize = Resize(size=(tensor.shape[-2] * 2, tensor.shape[-1] * 2), antialias=True)
+    return resize.transform(tensor, {})
 
 
 def display_reverse(images: List, to_file=None):
@@ -223,8 +229,8 @@ def whole_datasource_tiled_inference(
     with no_grad():
         print("Starting to compute infill mask")
         print(src_mask.shape)
-        # keep_mask = compute_infill_keep_mask(src_mask[0][0]).reshape(src_mask.shape)
-        keep_mask = torch.ones(src_frame.shape) * logical_not(src_mask)
+        keep_mask = compute_infill_keep_mask(src_mask[0][0]).reshape(src_mask.shape)
+        # keep_mask = torch.ones(src_frame.shape) * logical_not(src_mask)
 
         print("Computed infill mask")
 
@@ -335,12 +341,15 @@ def whole_datasource_tiled_inference(
         result = result[:, :, 0 : src_frame.shape[-2], 0 : src_frame.shape[-1]]
         print("post trunc", result.shape)
 
+        result = aa(result)
+        print(result.shape)
+
         display_reverse(
             [
                 src_frame.reshape(src_shape).to("cpu"),
                 src_mask.reshape(src_shape).to("cpu"),
                 keep_mask.reshape(src_shape).to("cpu"),
-                result.reshape(src_shape).to("cpu"),
+                result.to("cpu"),
             ]
         )
 

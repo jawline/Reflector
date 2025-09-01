@@ -11,5 +11,6 @@ class TerrainDataset(Dataset):
         return len(self.files)
 
     def __getitem__(self, idx):
+        print("Loading ", self.files[idx])
         result = load(self.files[idx])
         return result
