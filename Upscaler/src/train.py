@@ -111,7 +111,7 @@ def train_auto(
     # when used with beta-VAE
     criterion = nn.MSELoss(reduction="sum")
 
-    #for param_group in optimizer.param_groups:
+    # for param_group in optimizer.param_groups:
     #    param_group['lr'] = param_group['lr'] * 0.1
 
     def checkpoint():
@@ -151,14 +151,12 @@ def train_auto(
             max_noise = 0.1
             noise_thresh_per_batch_elt = (
                 min_noise + (rand((batch_size, 1, 1, 1)) * (max_noise - min_noise))
-            ).to(device)  
+            ).to(device)
             additional_noise = rand_like(for_train) > noise_thresh_per_batch_elt
 
             total_mask = logical_and(batch_noise, additional_noise)
 
-            for_autoencoder = (for_train * total_mask) + (
-                -1 * logical_not(total_mask)
-            )
+            for_autoencoder = (for_train * total_mask) + (-1 * logical_not(total_mask))
 
             encoded = autoencoder.encode(for_autoencoder)
             sample = encoded.sample()
@@ -195,16 +193,24 @@ def train_auto(
 
                 for elt in range(0, for_train.shape[0]):
                     dec_for_train = for_train.to("cpu")[elt].unsqueeze(0).detach()
-                    dec_for_autoencoder = for_autoencoder.to("cpu")[elt].unsqueeze(0).detach()
+                    dec_for_autoencoder = (
+                        for_autoencoder.to("cpu")[elt].unsqueeze(0).detach()
+                    )
                     dec_decoded = decoded.to("cpu")[elt].unsqueeze(0).detach()
                     dec_mask = mask.to("cpu")[elt].unsqueeze(0).detach()
-                    dec_reconstructed = reconstructed.to("cpu")[elt].unsqueeze(0).detach()
+                    dec_reconstructed = (
+                        reconstructed.to("cpu")[elt].unsqueeze(0).detach()
+                    )
                     display_reverse(
-                        [dec_for_train, dec_mask, dec_for_autoencoder, dec_decoded, dec_reconstructed],
+                        [
+                            dec_for_train,
+                            dec_mask,
+                            dec_for_autoencoder,
+                            dec_decoded,
+                            dec_reconstructed,
+                        ],
                         to_file=elt,
                     )
-
-
 
         avg_loss = total_loss / dataset_per_epoch
         scheduler.step(avg_loss)
