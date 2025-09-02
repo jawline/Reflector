@@ -67,12 +67,16 @@ impl Model {
                 };
 
                 // X face, always draw, reverse order for normal if sloping downward
-                add((1, 0, 5), z, last_z_y);
-                add((5, 0, 4), z, last_z_y);
+                if y == 0 || last_z_y != z {
+                    add((1, 0, 5), z, last_z_y);
+                    add((5, 0, 4), z, last_z_y);
+                }
 
                 // Second side (pointing y north), similar shared faces to the x dir
-                add((0, 3, 4), z, last_z_x);
-                add((4, 3, 7), z, last_z_x);
+                if x == 0 || last_z_x != z {
+                    add((0, 3, 4), z, last_z_x);
+                    add((4, 3, 7), z, last_z_x);
+                }
 
                 // Third side
                 // Since the previous cell can share an edge we only draw this at the end

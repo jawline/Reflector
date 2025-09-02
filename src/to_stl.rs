@@ -19,10 +19,10 @@ pub fn to_stl(model: &Model) -> Vec<Triangle> {
         let n = u.cross(v);
         let normal = n.normalize();
 
-        println!("{:?} {:?} {:?}", vertex1, vertex2, vertex3);
-        println!("U {:?} V {:?}", u, v);
-        println!("N {:?}", n);
-        println!("{:?}", normal);
+        //println!("{:?} {:?} {:?}", vertex1, vertex2, vertex3);
+        //println!("U {:?} V {:?}", u, v);
+        //println!("N {:?}", n);
+        //println!("{:?}", normal);
 
         let triangle = Triangle {
             normal: Vector::new(normal.into()),

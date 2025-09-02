@@ -301,15 +301,15 @@ def whole_datasource_tiled_inference(
     print("Inf result", result.shape)
 
     #result = aa(result)
-    print("AA result", result.shape)
+    #print("AA result", result.shape)
 
-    display_reverse(
-        [
-            src_frame.to("cpu"),
-            src_mask.to("cpu"),
-            keep_mask.to("cpu"),
-            result.to("cpu"),
-        ]
-    )
+    #display_reverse(
+    #    [
+    #        src_frame.to("cpu"),
+    #        src_mask.to("cpu"),
+    #        keep_mask.to("cpu"),
+    #        result.to("cpu"),
+    #    ]
+    #)
 
     return result
