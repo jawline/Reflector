@@ -4,7 +4,6 @@ use bevy::input::ButtonState;
 use bevy::pbr::wireframe::{WireframeConfig, WireframePlugin};
 use bevy::pbr::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
-use bevy::render::mesh::Indices;
 use bevy::render::render_resource::Extent3d;
 use bevy::render::render_resource::PrimitiveTopology;
 use bevy::render::render_resource::TextureDimension;
@@ -16,10 +15,7 @@ use env_logger;
 use log::info;
 use rust_las_printer::{heightmap::Heightmap, to_3d_model::Model};
 use std::f32::consts::PI;
-use std::{
-    fs::{read, File},
-    io::{BufReader, Read},
-};
+use std::fs::read;
 
 use serde_pickle::DeOptions;
 
@@ -40,21 +36,14 @@ fn main() {
         .run();
 }
 
-fn bytes(path: &str) -> Vec<u8> {
-    let f = File::open(path).unwrap();
-    let mut reader = BufReader::new(f);
-    let mut buffer = Vec::new();
-    reader.read_to_end(&mut buffer).unwrap();
-    buffer
-}
-
 fn heightmap_to_mesh_and_image(heightmap: &Heightmap<f32>) -> (Mesh, Image) {
     let model = Model::of_heightmap(&heightmap);
 
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
 
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, model.vertices);
-    mesh.set_indices(Some(Indices::U32(model.indices)));
+    let vertices_in_order: Vec<[f32; 3]> = model.triangles.iter().flat_map(|x| x.clone()).collect();
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices_in_order);
+    mesh.compute_flat_normals();
 
     let size = Extent3d {
         width: heightmap.width as u32,

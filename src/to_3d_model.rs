@@ -1,144 +1,109 @@
 use crate::heightmap::Heightmap;
-use bevy::math::Vec3;
 use log::info;
 
-/// Compute the normal as the cross product of (v1 - v2) nd (v1- v3). Depending on the direction
-/// the normal might need to be negated.
-fn compute_normal(
-    (x1, y1): (usize, usize),
-    (x2, y2): (usize, usize),
-    (x3, y3): (usize, usize),
-    vertices: &[[f32; 3]],
-    heightmap: &Heightmap<f32>,
-) -> Vec3 {
-    let off1 = heightmap.offset((x1, y1));
-    let off2 = heightmap.offset((x2, y2));
-    let off3 = heightmap.offset((x3, y3));
-
-    let va: Vec3 = vertices[off1].into();
-    let vb: Vec3 = vertices[off2].into();
-    let vc: Vec3 = vertices[off3].into();
-    (va - vc).cross(va - vb)
-}
+pub type Point = [f32; 3];
+pub type TriangleCCW = [Point; 3];
 
 pub struct Model {
-    pub vertices: Vec<[f32; 3]>,
-    pub indices: Vec<u32>,
+    pub triangles: Vec<TriangleCCW>,
 }
 
-const VERTEX_STRIDE: usize = 8;
+fn scale_point(p: &Point, q: &Point) -> Point {
+    [p[0] * q[0], p[1] * q[1], p[2] * q[2]]
+}
+
+fn scale_triangle(t: &TriangleCCW, q: &Point) -> TriangleCCW {
+    [
+        scale_point(&t[0], q),
+        scale_point(&t[1], q),
+        scale_point(&t[2], q),
+    ]
+}
 
 impl Model {
     pub fn scale(&mut self, (scale_x, scale_y, scale_z): (f32, f32, f32)) {
-        for vertex in &mut self.vertices {
-            vertex[0] = vertex[0] * scale_x;
-            vertex[1] = vertex[1] * scale_y;
-            vertex[2] = vertex[2] * scale_z;
-        }
+        self.triangles = self
+            .triangles
+            .iter()
+            .map(|x| scale_triangle(x, &[scale_x, scale_y, scale_z]))
+            .collect();
     }
 
     pub fn of_heightmap(heightmap: &Heightmap<f32>) -> Self {
-        let mut vertices = Vec::new();
+        let mut triangles = Vec::new();
 
         info!(
             "Meshifying heightmap of size {} {}",
             heightmap.width, heightmap.height
         );
 
-        // The body of the mesh
         for y in 0..heightmap.height {
             for x in 0..heightmap.width {
-                vertices.push([-(x as f32), y as f32, heightmap[(x, y)] as f32]);
-                vertices.push([-((x + 1) as f32), y as f32, heightmap[(x, y)] as f32]);
-                vertices.push([-(x as f32), (y + 1) as f32, heightmap[(x, y)] as f32]);
-                vertices.push([-((x + 1) as f32), (y + 1) as f32, heightmap[(x, y)] as f32]);
+                let z = heightmap[(x, y)];
+                let last_z_x = if x == 0 { 0. } else { heightmap[(x - 1, y)] };
+                let last_z_y = if y == 0 { 0. } else { heightmap[(x, y - 1)] };
 
-                vertices.push([-(x as f32), y as f32, 0.]);
-                vertices.push([-((x + 1) as f32), y as f32, 0.]);
-                vertices.push([-(x as f32), (y + 1) as f32, 0.]);
-                vertices.push([-((x + 1) as f32), (y + 1) as f32, 0.]);
-
-            }
-        }
-
-        let base_off = vertices.len() as u32;
-
-        vertices.push([0., 0., 0.]);
-        vertices.push([-(heightmap.width as f32), 0., 0.]);
-        vertices.push([-(heightmap.width as f32), heightmap.height as f32, 0.]);
-        vertices.push([0., heightmap.height as f32, 0.]);
-
-        // Compute indices
-        let mut indices: Vec<u32> = Vec::new();
-
-        println!("VLEN {}", vertices.len());
-
-        for y in 0..heightmap.height {
-            for x in 0..heightmap.width {
-                let this_triangle = (heightmap.offset((x, y)) * VERTEX_STRIDE) as u32;
-
-                let mut add = |(x, y, z):( isize, isize, isize), reverse| {
-                    let off = |x| ((this_triangle as isize) + x) as u32;
-                    let (x, y, z) = (off(x), off(y), off(z));
-                    let (x, y, z) = if reverse { (x, z, y) } else { (x, y, z) };
-                    indices.push(x);
-                    indices.push(y);
-                    indices.push(z); 
+                let point_to_vertex = |pt, z, lz| {
+                    let x = x as f32;
+                    let y = y as f32;
+                    match pt {
+                        0 => [x, y, z],
+                        1 => [x + 1., y, z],
+                        2 => [x + 1., y + 1., z],
+                        3 => [x, y + 1., z],
+                        4 => [x, y, lz],
+                        5 => [x + 1., y, lz],
+                        6 => [x + 1., y + 1., lz],
+                        7 => [x, y + 1., lz],
+                        _ => panic!("impossible point"),
+                    }
                 };
 
-                // First side, if an edge draw to zero else draw to previous cell so we are
-                // manifold
-                if x == 0 {
-                    add((4, 2, 0), false);
-                    add((2, 4, 6), false);
-                } else {
-                    let last_vertex = -(VERTEX_STRIDE as isize);
-                    add((2, 0, last_vertex + 1), false);
-                    add((2, last_vertex + 1, last_vertex + 3), false);
-                }
+                let mut add = |(x, y, z): (usize, usize, usize), hz, lz| {
+                    let px = point_to_vertex(x, hz, lz);
+                    let py = point_to_vertex(y, hz, lz);
+                    let pz = point_to_vertex(z, hz, lz);
+                    triangles.push([px, py, pz]);
+                };
+
+                // X face, always draw, reverse order for normal if sloping downward
+                add((1, 0, 5), z, last_z_y);
+                add((5, 0, 4), z, last_z_y);
 
                 // Second side (pointing y north), similar shared faces to the x dir
-                if y == 0 {
-                    add((0, 4, 1), true);
-                    add((4, 5, 1), true);
-                } else {
-                    let row_stride: isize = (VERTEX_STRIDE * heightmap.width) as isize;
-                    add((0, -row_stride + 2, 1), true);
-                    add((-row_stride + 2, -row_stride + 3, 1), true);
-                }
+                add((0, 3, 4), z, last_z_x);
+                add((4, 3, 7), z, last_z_x);
 
                 // Third side
                 // Since the previous cell can share an edge we only draw this at the end
-                if x == heightmap.width - 1 {
-                    add((7, 1, 3), false);
-                    add((7, 5, 1), false);
+                if y == heightmap.height - 1 {
+                    add((7, 3, 2), z, 0.);
+                    add((2, 6, 7), z, 0.);
                 }
 
                 // Fourth side, since the previous cell can share an edge we only draw this at the
                 // end
-                if y == heightmap.height - 1 {
-                    add((2, 6, 3), false);
-                    add((3, 6, 7), false);
+                if x == heightmap.width - 1 {
+                    add((2, 1, 5), z, 0.);
+                    add((2, 5, 6), z, 0.);
                 }
 
                 // Top
-                add((2, 1, 0), false);
-                add((2, 3, 1), false);
+                add((3, 0, 1), z, 0.);
+                add((3, 1, 2), z, 0.);
             }
         }
 
-        indices.push(base_off );
-        indices.push(base_off + 1);
-        indices.push(base_off + 2);
+        let base_points = [
+            [0., 0., 0.],
+            [heightmap.width as f32, 0., 0.],
+            [heightmap.width as f32, heightmap.height as f32, 0.],
+            [0., heightmap.height as f32, 0.],
+        ];
+        triangles.push([base_points[1], base_points[0], base_points[2]]);
+        triangles.push([base_points[0], base_points[3], base_points[2]]);
 
-        indices.push(base_off + 2);
-        indices.push(base_off + 3);
-        indices.push(base_off );
-
-        let mut result = Model {
-            vertices,
-            indices,
-        };
+        let mut result = Model { triangles };
 
         result.scale((1., 1., heightmap.scale_z));
         result

@@ -26,6 +26,7 @@ itertools = "0.10.5"
 las = { version = "0.8.1", features = ["laz"] }
 log = "0.4.18"
 medians = "2.2.6"
+nalgebra = "0.34.0"
 png = "0.17.8"
 postcard = { version = "1.0.4", features = ["alloc", "use-std"] }
 quantiles = "0.7.1"
@@ -35,6 +36,8 @@ serde = "1.0.163"
 serde-pickle = "1.2.0"
 stl_io = "0.7.0"
 threadpool = "1.8.1"
+threecrate-core = "0.3.1"
+threecrate-io = "0.3.1"
 walkdir = "2.3.3"
 
 

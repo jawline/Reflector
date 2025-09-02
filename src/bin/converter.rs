@@ -3,17 +3,20 @@ use log::{error, info, warn};
 use rust_las_printer::heightmap::{Heightmap, InterpolationMode, StreamingHeightmap};
 use rust_las_printer::las_data::{load_from_directory, LasType, Limits};
 use rust_las_printer::to_3d_model::Model;
+use rust_las_printer::to_obj::to_obj;
 use rust_las_printer::to_stl::to_stl;
 use serde_pickle::{DeOptions, SerOptions};
 use std::{
     fs::{read, File},
     io::{BufWriter, Write},
 };
+use threecrate_io::{obj::ObjWriter, MeshWriter};
 
 #[derive(PartialEq, Eq)]
 enum WriteTo {
     Bin,
     Stl,
+    Obj,
     UpscaleFmt,
 }
 
@@ -23,6 +26,7 @@ impl WriteTo {
         match s {
             "bin" => Bin,
             "stl" => Stl,
+            "obj" => Obj,
             "upscale" => UpscaleFmt,
             _ => panic!("Unsupported WriteTo format"),
         }
@@ -184,6 +188,11 @@ fn main() {
                 let mesh = to_stl(&model);
                 let mut file = File::create(args.output_path).unwrap();
                 stl_io::write_stl(&mut file, mesh.into_iter()).unwrap()
+            }
+            WriteTo::Obj => {
+                let model = Model::of_heightmap(&grid_zones);
+                let mesh = to_obj(&model);
+                ObjWriter::write_mesh(&mesh, args.output_path).unwrap();
             }
             WriteTo::Bin => {
                 let file = File::create(args.las_folder_path).unwrap();
