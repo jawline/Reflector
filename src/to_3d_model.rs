@@ -93,53 +93,42 @@ impl Model {
                     add((2, 4, 6), false);
                 } else {
                     let last_vertex = -(VERTEX_STRIDE as isize);
-                    let going_up = heightmap[(x, y)] <= heightmap[(x - 1, y)];
-                    println!("Going up: {}", going_up);
-                    add((2, 0, last_vertex + 1), true);
-                    add((2, last_vertex + 1, last_vertex + 3), true);
+                    add((2, 0, last_vertex + 1), false);
+                    add((2, last_vertex + 1, last_vertex + 3), false);
                 }
 
                 // Second side (pointing y north), similar shared faces to the x dir
-                //if y == 0 {
-                //    add((0, 4, 1), true);
-                //    add((4, 5, 1), true);
-                //} else {
-                //    let going_down = heightmap[(x, y)] <= heightmap[(x, y - 1)];
-                //    let row_stride: isize = (VERTEX_STRIDE * heightmap.width) as isize;
-                //    add((0, -row_stride + 2, 1), false);
-                //    add((-row_stride + 2, -row_stride + 3, 1), false);
-                //}
+                if y == 0 {
+                    add((0, 4, 1), true);
+                    add((4, 5, 1), true);
+                } else {
+                    let row_stride: isize = (VERTEX_STRIDE * heightmap.width) as isize;
+                    add((0, -row_stride + 2, 1), true);
+                    add((-row_stride + 2, -row_stride + 3, 1), true);
+                }
 
-                ////// Third side
-                ////// Since the previous cell can share an edge we only draw this at the end
-                //if x == heightmap.width - 1 {
-                //    add((7, 1, 3), true);
-                //    add((7, 5, 1), true);
-                //}
+                // Third side
+                // Since the previous cell can share an edge we only draw this at the end
+                if x == heightmap.width - 1 {
+                    add((7, 1, 3), false);
+                    add((7, 5, 1), false);
+                }
 
-                ////// Fourth side, since the previous cell can share an edge we only draw this at the
-                ////// end
-                //if y == heightmap.height - 1 {
-                //    add((2, 6, 3), false);
-                //    add((3, 6, 7), false);
-                //}
+                // Fourth side, since the previous cell can share an edge we only draw this at the
+                // end
+                if y == heightmap.height - 1 {
+                    add((2, 6, 3), false);
+                    add((3, 6, 7), false);
+                }
 
-                ////// Top
-                //add((2, 1, 0), false);
-                //add((2, 3, 1), false);
+                // Top
+                add((2, 1, 0), false);
+                add((2, 3, 1), false);
             }
         }
 
-        indices.push(base_off + 2);
-        indices.push(base_off + 1);
         indices.push(base_off );
-
-        indices.push(base_off);
         indices.push(base_off + 1);
-        indices.push(base_off + 2 );
-
-        indices.push(base_off );
-        indices.push(base_off + 3);
         indices.push(base_off + 2);
 
         indices.push(base_off + 2);
@@ -150,6 +139,7 @@ impl Model {
             vertices,
             indices,
         };
+
         result.scale((1., 1., heightmap.scale_z));
         result
     }
