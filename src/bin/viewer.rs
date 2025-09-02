@@ -54,8 +54,6 @@ fn heightmap_to_mesh_and_image(heightmap: &Heightmap<f32>) -> (Mesh, Image) {
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, model.vertices);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, model.normals);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, model.uvs);
     mesh.set_indices(Some(Indices::U32(model.indices)));
 
     let size = Extent3d {

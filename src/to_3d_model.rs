@@ -23,8 +23,6 @@ fn compute_normal(
 
 pub struct Model {
     pub vertices: Vec<[f32; 3]>,
-    pub normals: Vec<[f32; 3]>,
-    pub uvs: Vec<[f32; 2]>,
     pub indices: Vec<u32>,
 }
 
@@ -41,8 +39,6 @@ impl Model {
 
     pub fn of_heightmap(heightmap: &Heightmap<f32>) -> Self {
         let mut vertices = Vec::new();
-        let mut uvs = Vec::new();
-        let mut normals: Vec<[f32; 3]> = Vec::new();
 
         info!(
             "Meshifying heightmap of size {} {}",
@@ -62,22 +58,6 @@ impl Model {
                 vertices.push([-(x as f32), (y + 1) as f32, 0.]);
                 vertices.push([-((x + 1) as f32), (y + 1) as f32, 0.]);
 
-                for i in 0..8 {
-                    uvs.push([
-                        x as f32 / heightmap.width as f32,
-                        y as f32 / heightmap.height as f32,
-                    ]);
-                }
-
-                normals.push([1., -1., 1.]);
-                normals.push([-1., -1., 1.]);
-                normals.push([1., 1., 1.]);
-                normals.push([-1., 1., 1.]);
-
-                normals.push([1., -1., -1.]);
-                normals.push([-1., -1., -1.]);
-                normals.push([1., 1., -1.]);
-                normals.push([-1., 1., -1.]);
             }
         }
 
@@ -87,23 +67,6 @@ impl Model {
         vertices.push([-(heightmap.width as f32), 0., 0.]);
         vertices.push([-(heightmap.width as f32), heightmap.height as f32, 0.]);
         vertices.push([0., heightmap.height as f32, 0.]);
-
-        for i in 0..4 {
-            uvs.push([0., 0.]);
-        }
-
-        normals.push([0., -1., 0.]);
-        normals.push([0., -1., 0.]);
-        normals.push([0., -1., 0.]);
-        normals.push([0., -1., 0.]);
-
-        for normal in &mut normals {
-
-            let len = (normal[0].powf(2.) + normal[1].powf(2.) + normal[2].powf(2.)).sqrt();
-            normal[0] /= len;
-            normal[1] /= len;
-            normal[2] /= len;
-        }
 
         // Compute indices
         let mut indices: Vec<u32> = Vec::new();
@@ -137,33 +100,33 @@ impl Model {
                 }
 
                 // Second side (pointing y north), similar shared faces to the x dir
-                if y == 0 {
-                    add((0, 4, 1), true);
-                    add((4, 5, 1), true);
-                } else {
-                    let going_down = heightmap[(x, y)] <= heightmap[(x, y - 1)];
-                    let row_stride: isize = (VERTEX_STRIDE * heightmap.width) as isize;
-                    add((0, -row_stride + 2, 1), false);
-                    add((-row_stride + 2, -row_stride + 3, 1), false);
-                }
+                //if y == 0 {
+                //    add((0, 4, 1), true);
+                //    add((4, 5, 1), true);
+                //} else {
+                //    let going_down = heightmap[(x, y)] <= heightmap[(x, y - 1)];
+                //    let row_stride: isize = (VERTEX_STRIDE * heightmap.width) as isize;
+                //    add((0, -row_stride + 2, 1), false);
+                //    add((-row_stride + 2, -row_stride + 3, 1), false);
+                //}
 
-                //// Third side
-                //// Since the previous cell can share an edge we only draw this at the end
-                if x == heightmap.width - 1 {
-                    add((7, 1, 3), true);
-                    add((7, 5, 1), true);
-                }
+                ////// Third side
+                ////// Since the previous cell can share an edge we only draw this at the end
+                //if x == heightmap.width - 1 {
+                //    add((7, 1, 3), true);
+                //    add((7, 5, 1), true);
+                //}
 
-                //// Fourth side, since the previous cell can share an edge we only draw this at the
-                //// end
-                if y == heightmap.height - 1 {
-                    add((2, 6, 3), false);
-                    add((3, 6, 7), false);
-                }
+                ////// Fourth side, since the previous cell can share an edge we only draw this at the
+                ////// end
+                //if y == heightmap.height - 1 {
+                //    add((2, 6, 3), false);
+                //    add((3, 6, 7), false);
+                //}
 
-                //// Top
-                add((2, 1, 0), false);
-                add((2, 3, 1), false);
+                ////// Top
+                //add((2, 1, 0), false);
+                //add((2, 3, 1), false);
             }
         }
 
@@ -185,8 +148,6 @@ impl Model {
 
         let mut result = Model {
             vertices,
-            normals,
-            uvs,
             indices,
         };
         result.scale((1., 1., heightmap.scale_z));
