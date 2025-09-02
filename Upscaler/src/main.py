@@ -9,7 +9,7 @@ from infer import (
     generative_inference,
     whole_datasource_tiled_inference,
 )
-from constants import tile_width, tile_height
+from constants import tile_size
 from infer import display_reverse
 from math import nan
 from torch import isnan, logical_not, nan_to_num
@@ -75,8 +75,7 @@ def main():
         inferred_frame = whole_datasource_tiled_inference(
             without_nan,
             mask,
-            tile_width,
-            tile_height,
+            tile_size,
             device=device,
             checkpoint_path=checkpoint,
         )
@@ -92,6 +91,7 @@ def main():
 
         with open("out.pt", "wb") as f:
             pickle.dump(result, f)
+            print("Wrote output")
 
 
 if __name__ == "__main__":

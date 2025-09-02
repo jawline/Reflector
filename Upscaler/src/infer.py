@@ -24,16 +24,21 @@ from torch import (
     sqrt,
     sum,
     transpose,
+    ones,
+    zeros,
 )
 from torch.nn.functional import pad
-from constants import num_time_steps, tile_width, tile_height
+from constants import num_time_steps
 from torchvision.transforms.v2 import Resize
+from torchvision.transforms.functional import adjust_sharpness
 import preprocess
 
 
 def aa(tensor):
-    resize = Resize(size=(tensor.shape[-2] * 2, tensor.shape[-1] * 2), antialias=True)
-    return resize.transform(tensor, {})
+	resize1 = Resize(size=(tensor.shape[-2] * 2, tensor.shape[-1] * 2), antialias=True)
+	resize2 = Resize(size=(tensor.shape[-2], tensor.shape[-1]), antialias=True)
+	sharpened = adjust_sharpness(tensor, sharpness_factor=2)
+	return resize2.transform(resize1.transform(sharpened, {}), {})
 
 
 def display_reverse(images: List, to_file=None):
@@ -75,9 +80,7 @@ def combine_with_src_frame(src_frame, src_mask, frame):
     return (src_frame * src_mask) + (frame * logical_not(src_mask))
 
 
-def infer_frame(device, src_frame, src_mask, model, num_time_steps, sample_times):
-    src_frame = src_frame.to(device)
-    src_mask = src_mask.to(device)
+def infer_frame(device, src_frame, src_mask, model):
 
     with no_grad():
         encoded = model.encode((src_frame * src_mask) + (-1 * logical_not(src_mask)))
@@ -209,15 +212,21 @@ def compute_infill_keep_mask(src_mask):
 
 
 # To improve output we make sure we overlap some of the rows and columns with previous inferences during the tiled inference
-min_tile_overlap = 8
+min_tile_overlap = 32
 
 
-def tiled_interence(src_frame, src_mask, src_keep, autoencoder, kernel_size):
+def tiled_inference(src_frame, src_mask, src_keep, autoencoder, kernel_size, device):
+    src_frame = src_frame.to(device)
+    src_mask = src_mask.to(device)
+    src_keep = src_keep.to(device)
+    
     src_height = src_frame.shape[-2]
     src_width = src_frame.shape[-1]
 
-    for start_y in range(0, src_frame.shape[-2], kernel_height - min_tile_overlap):
-        for start_x in range(0, src_frame.shape[-1], kernel_width - tile_overlap):
+    for start_y in range(0, src_frame.shape[-2], kernel_size - min_tile_overlap):
+        print("Start y", start_y)
+        for start_x in range(0, src_frame.shape[-1], kernel_size - min_tile_overlap):
+
             if start_x + kernel_size > src_width:
                 start_x -= start_x + kernel_size - src_width
 
@@ -229,10 +238,13 @@ def tiled_interence(src_frame, src_mask, src_keep, autoencoder, kernel_size):
 
             tile_data = src_frame[:, :, start_y:end_y, start_x:end_x]
             tile_mask = src_mask[:, :, start_y:end_y, start_x:end_x]
-            tile_keep = src_mask[:, :, start_y:end_y, start_x:end_x]
+            tile_keep = src_keep[:, :, start_y:end_y, start_x:end_x]
+
+            print("Extracted tile shape", start_x, start_y, end_x, end_y, end_x - start_x, end_y - start_y, tile_data.shape)
+
 
             tiles_that_dont_need_inference = logical_and(
-                tile_mask, logical_not(tile_keep_mask)
+                tile_mask, logical_not(tile_keep)
             )
 
             need_to_do_inference = (
@@ -240,20 +252,30 @@ def tiled_interence(src_frame, src_mask, src_keep, autoencoder, kernel_size):
             )
 
             if need_to_do_inference:
-                print("Inferring tile", col, row)
+                print("Inferring tile", start_x, start_y)
 
                 inference = infer_frame(
                     device,
                     tile_data,
                     tile_mask,
                     autoencoder,
-                    num_time_steps,
-                    times,
                 )
 
-                src_frame[:, :, start_x:end_x, start_y:end_y] = inference
+                # Only keep the regions we actually inferred
+                reconstructed_frame = (tile_data * tile_mask) + (inference * tile_keep)
+
+                src_frame[:, :, start_y:end_y, start_x:end_x] = reconstructed_frame
+                src_mask[:,:,start_y:end_y,start_x:end_x] = ones(tile_data.shape, dtype=torch.bool)
+                src_keep[:,:,start_y:end_y,start_x:end_x] = zeros(tile_data.shape, dtype = torch.bool)
+
+                #display_reverse(
+                #    [
+                #        src_frame.to("cpu"),
+                #        src_mask.to("cpu"),
+                #    ]
+                #)
             else:
-                print("Skipping tile", col, row)
+                print("Skipping tile", start_x, start_y)
 
     return src_frame
 
@@ -271,22 +293,21 @@ def whole_datasource_tiled_inference(
         device, checkpoint_path, 0.1
     )
 
-    times = []
-
     print("Starting to compute infill mask", src_mask.shape)
     keep_mask = compute_infill_keep_mask(src_mask[0][0]).reshape(src_mask.shape)
     print("Computed infill mask")
 
-    result = tiled_inference(src_frame, src_mask, keep_mask, autoencoder, kernel_size)
+    result = tiled_inference(src_frame.clone(), src_mask, keep_mask, autoencoder, kernel_size, device)
     print("Inf result", result.shape)
-    result = aa(result)
+
+    #result = aa(result)
     print("AA result", result.shape)
 
     display_reverse(
         [
-            src_frame.reshape(src_shape).to("cpu"),
-            src_mask.reshape(src_shape).to("cpu"),
-            keep_mask.reshape(src_shape).to("cpu"),
+            src_frame.to("cpu"),
+            src_mask.to("cpu"),
+            keep_mask.to("cpu"),
             result.to("cpu"),
         ]
     )

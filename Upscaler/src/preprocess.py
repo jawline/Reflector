@@ -5,7 +5,7 @@ from glob import glob
 from math import floor, ceil
 from random import Random
 from tqdm import tqdm
-from constants import tile_width, tile_height
+from constants import tile_size
 from functools import lru_cache
 from math import nan
 
@@ -64,8 +64,8 @@ def load(path):
 # Expensive, so best to preprocess and then used pre serialized samples
 class TerrainDatasetSlow(Dataset):
     def __init__(self, samples_dir):
-        self.sample_x = tile_width
-        self.sample_y = tile_height
+        self.sample_x = tile_size
+        self.sample_y = tile_size
         files = glob(f"{samples_dir}/**/**.pre.pt", recursive=True)
         final_files = []
         print("Loading", len(files), " files")

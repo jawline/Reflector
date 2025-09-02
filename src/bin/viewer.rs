@@ -17,9 +17,11 @@ use log::info;
 use rust_las_printer::{heightmap::Heightmap, to_3d_model::Model};
 use std::f32::consts::PI;
 use std::{
-    fs::File,
+    fs::{read, File},
     io::{BufReader, Read},
 };
+
+use serde_pickle::DeOptions;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -81,8 +83,11 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let args = Args::parse();
-    let bytes = bytes(&args.input_path);
-    let heightmap: Heightmap<f32> = postcard::from_bytes(&bytes).unwrap();
+
+    let heightmap = read(&args.input_path).unwrap();
+    let heightmap: Heightmap<Option<f32>> =
+        serde_pickle::from_slice(&heightmap, DeOptions::new()).unwrap();
+    let heightmap = heightmap.fill_none_with_zero_and_add_base(0.1, 0.1);
     let (mesh, heightmap_texture) = heightmap_to_mesh_and_image(&heightmap);
     let (start_x, start_y) = (heightmap.width as f32 / 2., heightmap.height as f32 / 2.);
 

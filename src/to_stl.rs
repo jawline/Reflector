@@ -13,18 +13,32 @@ pub fn to_stl(model: &Model) -> Vec<Triangle> {
         let index2 = model.indices[i + 1] as usize;
         let index3 = model.indices[i + 2] as usize;
 
-        let normal: [f32; 3] = ((Vec3::from(model.normals[index1])
-            + Vec3::from(model.normals[index2])
-            + Vec3::from(model.normals[index3]))
-            / 3.)
-            .into();
+        // CCW order
+        let vertex1 = Vec3::from(model.vertices[index1].clone());
+        let vertex2 = Vec3::from(model.vertices[index2].clone());
+        let vertex3 = Vec3::from(model.vertices[index3].clone());
+
+        if vertex1 == vertex2 || vertex1 == vertex3  || vertex2 == vertex3 {
+            continue;
+        }
+
+        let u = vertex2 - vertex1;
+        let v = vertex3 - vertex1;
+        let n = u.cross(v);
+        let normal = n.normalize();
+        
+        println!("{:?} {:?} {:?}", vertex1, vertex2, vertex3);
+        println!("U {:?} V {:?}", u, v);
+        println!("N {:?}", n);
+        println!("{:?}", normal);
+
 
         let triangle = Triangle {
-            normal: Vector::new(normal),
+            normal: Vector::new(normal.into()),
             vertices: [
-                Vector::new(model.vertices[index1].clone()),
-                Vector::new(model.vertices[index2].clone()),
-                Vector::new(model.vertices[index3].clone()),
+                Vector::new(vertex1.into()),
+                Vector::new(vertex2.into()),
+                Vector::new(vertex3.into()),
             ],
         };
 

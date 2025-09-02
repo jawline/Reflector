@@ -24,12 +24,12 @@ impl LasType {
             LasType::Ground => match classification {
                 // TODO: Make this customizable - I've found anecodtally that depending on dataset
                 // ground is often classified as low / medium vegetation
-                Ground  => true,
+                Ground => true,
                 _ => false,
             },
             LasType::Buildings => match classification {
-                  Building | RoadSurface | BridgeDeck | Rail => true,
-                  // TODO: Consider these, but I think they aren't good things to add | WireGuard | WireConductor | TransmissionTower | WireStructureConnector |
+                Building | RoadSurface | BridgeDeck | Rail => true,
+                // TODO: Consider these, but I think they aren't good things to add | WireGuard | WireConductor | TransmissionTower | WireStructureConnector |
                 _ => false,
             },
             LasType::Water => match classification {

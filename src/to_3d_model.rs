@@ -2,84 +2,6 @@ use crate::heightmap::Heightmap;
 use bevy::math::Vec3;
 use log::info;
 
-/// Add a border along the y axis at a fixed x (x should either be 0 or heightmap.height - 1)
-fn add_y_border(
-    x: usize,
-    norm: [f32; 3],
-    vertices: &mut Vec<[f32; 3]>,
-    normals: &mut Vec<[f32; 3]>,
-    uvs: &mut Vec<[f32; 2]>,
-    heightmap: &Heightmap<f32>,
-) -> usize {
-    let offset = vertices.len();
-
-    for y in 0..heightmap.height {
-        vertices.push([-(x as f32), y as f32, 0.]);
-        normals.push(norm.clone());
-        uvs.push([
-            x as f32 / heightmap.width as f32,
-            y as f32 / heightmap.height as f32,
-        ]);
-    }
-
-    offset
-}
-
-/// Add a border along the x axis at a fixed y (y should either be 0 or heightmap.width - 1)
-fn add_x_border(
-    y: usize,
-    norm: [f32; 3],
-    vertices: &mut Vec<[f32; 3]>,
-    normals: &mut Vec<[f32; 3]>,
-    uvs: &mut Vec<[f32; 2]>,
-    heightmap: &Heightmap<f32>,
-) -> usize {
-    let offset = vertices.len();
-
-    for x in 0..heightmap.width {
-        vertices.push([-(x as f32), y as f32, 0.]);
-        normals.push(norm.clone());
-        uvs.push([
-            x as f32 / heightmap.width as f32,
-            y as f32 / heightmap.height as f32,
-        ]);
-    }
-
-    offset
-}
-
-/// Add four vertices for a base to the model.
-fn add_base(
-    vertices: &mut Vec<[f32; 3]>,
-    normals: &mut Vec<[f32; 3]>,
-    uvs: &mut Vec<[f32; 2]>,
-    heightmap: &Heightmap<f32>,
-) -> usize {
-    let offset = vertices.len();
-
-    vertices.push([0., 0., 0.]);
-    normals.push([0., -1., 0.]);
-    uvs.push([0., 0.]);
-
-    vertices.push([-((heightmap.width - 1) as f32), 0., 0.]);
-    normals.push([0., -1., 0.]);
-    uvs.push([0., 0.]);
-
-    vertices.push([0., (heightmap.height - 1) as f32, 0.]);
-    normals.push([0., 0., -1.]);
-    uvs.push([0., 0.]);
-
-    vertices.push([
-        -((heightmap.height - 1) as f32),
-        (heightmap.height - 1) as f32,
-        0.,
-    ]);
-    normals.push([0., -1., 0.]);
-    uvs.push([0., 0.]);
-
-    offset
-}
-
 /// Compute the normal as the cross product of (v1 - v2) nd (v1- v3). Depending on the direction
 /// the normal might need to be negated.
 fn compute_normal(
@@ -106,6 +28,8 @@ pub struct Model {
     pub indices: Vec<u32>,
 }
 
+const VERTEX_STRIDE: usize = 8;
+
 impl Model {
     pub fn scale(&mut self, (scale_x, scale_y, scale_z): (f32, f32, f32)) {
         for vertex in &mut self.vertices {
@@ -118,6 +42,7 @@ impl Model {
     pub fn of_heightmap(heightmap: &Heightmap<f32>) -> Self {
         let mut vertices = Vec::new();
         let mut uvs = Vec::new();
+        let mut normals: Vec<[f32; 3]> = Vec::new();
 
         info!(
             "Meshifying heightmap of size {} {}",
@@ -128,174 +53,135 @@ impl Model {
         for y in 0..heightmap.height {
             for x in 0..heightmap.width {
                 vertices.push([-(x as f32), y as f32, heightmap[(x, y)] as f32]);
-                uvs.push([
-                    x as f32 / heightmap.width as f32,
-                    y as f32 / heightmap.height as f32,
-                ]);
+                vertices.push([-((x + 1) as f32), y as f32, heightmap[(x, y)] as f32]);
+                vertices.push([-(x as f32), (y + 1) as f32, heightmap[(x, y)] as f32]);
+                vertices.push([-((x + 1) as f32), (y + 1) as f32, heightmap[(x, y)] as f32]);
+
+                vertices.push([-(x as f32), y as f32, 0.]);
+                vertices.push([-((x + 1) as f32), y as f32, 0.]);
+                vertices.push([-(x as f32), (y + 1) as f32, 0.]);
+                vertices.push([-((x + 1) as f32), (y + 1) as f32, 0.]);
+
+                for i in 0..8 {
+                    uvs.push([
+                        x as f32 / heightmap.width as f32,
+                        y as f32 / heightmap.height as f32,
+                    ]);
+                }
+
+                normals.push([1., -1., 1.]);
+                normals.push([-1., -1., 1.]);
+                normals.push([1., 1., 1.]);
+                normals.push([-1., 1., 1.]);
+
+                normals.push([1., -1., -1.]);
+                normals.push([-1., -1., -1.]);
+                normals.push([1., 1., -1.]);
+                normals.push([-1., 1., -1.]);
             }
         }
 
-        let mut normals: Vec<[f32; 3]> = Vec::new();
+        let base_off = vertices.len() as u32;
 
-        for y in 0..heightmap.height {
-            for x in 0..heightmap.width {
-                let mut sum = Vec3::new(0., 0., 0.);
-                let mut total = 0;
+        vertices.push([0., 0., 0.]);
+        vertices.push([-(heightmap.width as f32), 0., 0.]);
+        vertices.push([-(heightmap.width as f32), heightmap.height as f32, 0.]);
+        vertices.push([0., heightmap.height as f32, 0.]);
 
-                // TODO: Area weight the normal average by multiplying each sum addition by the area of
-                // it and making total the total area of all normals rather than a count.
-
-                if x > 0 && y > 0 {
-                    sum += -compute_normal((x, y), (x, y - 1), (x - 1, y), &vertices, &heightmap);
-                    total += 1;
-                }
-
-                if x < heightmap.width - 1 && y < heightmap.height - 1 {
-                    sum += -compute_normal((x, y), (x, y + 1), (x + 1, y), &vertices, &heightmap);
-                    total += 1;
-                }
-
-                if x > 0 && y < heightmap.height - 1 {
-                    sum += compute_normal((x, y), (x, y + 1), (x - 1, y), &vertices, &heightmap);
-                    total += 1;
-                }
-
-                if x < heightmap.width - 1 && y > 0 {
-                    sum += -compute_normal((x, y), (x + 1, y), (x, y - 1), &vertices, &heightmap);
-                    total += 1;
-                }
-
-                normals.push((sum / total as f32).into());
-            }
+        for i in 0..4 {
+            uvs.push([0., 0.]);
         }
 
-        // Add some border and a base
-        let left_row_offset = add_y_border(
-            0,
-            [1., 0., 0.],
-            &mut vertices,
-            &mut normals,
-            &mut uvs,
-            heightmap,
-        );
-        let right_row_offset = add_y_border(
-            heightmap.width - 1,
-            [-1., 0., 0.],
-            &mut vertices,
-            &mut normals,
-            &mut uvs,
-            heightmap,
-        );
-        let bottom_offset = add_x_border(
-            0,
-            [0., 0., 1.],
-            &mut vertices,
-            &mut normals,
-            &mut uvs,
-            heightmap,
-        );
-        let top_offset = add_x_border(
-            heightmap.height - 1,
-            [0., 0., -1.],
-            &mut vertices,
-            &mut normals,
-            &mut uvs,
-            heightmap,
-        );
-        let base_offset = add_base(&mut vertices, &mut normals, &mut uvs, heightmap);
+        normals.push([0., -1., 0.]);
+        normals.push([0., -1., 0.]);
+        normals.push([0., -1., 0.]);
+        normals.push([0., -1., 0.]);
+
+        for normal in &mut normals {
+
+            let len = (normal[0].powf(2.) + normal[1].powf(2.) + normal[2].powf(2.)).sqrt();
+            normal[0] /= len;
+            normal[1] /= len;
+            normal[2] /= len;
+        }
 
         // Compute indices
         let mut indices: Vec<u32> = Vec::new();
 
-        for y in 0..(heightmap.height - 1) {
-            for x in 0..(heightmap.width - 1) {
-                let xoff = heightmap.offset((x, y)) as u32;
-                let next_y_xoff = heightmap.offset((x, y + 1)) as u32;
-                indices.push(xoff);
-                indices.push(next_y_xoff);
-                indices.push(xoff + 1);
-                indices.push(next_y_xoff);
-                indices.push(next_y_xoff + 1);
-                indices.push(xoff + 1);
+        println!("VLEN {}", vertices.len());
+
+        for y in 0..heightmap.height {
+            for x in 0..heightmap.width {
+                let this_triangle = (heightmap.offset((x, y)) * VERTEX_STRIDE) as u32;
+
+                let mut add = |(x, y, z):( isize, isize, isize), reverse| {
+                    let off = |x| ((this_triangle as isize) + x) as u32;
+                    let (x, y, z) = (off(x), off(y), off(z));
+                    let (x, y, z) = if reverse { (x, z, y) } else { (x, y, z) };
+                    indices.push(x);
+                    indices.push(y);
+                    indices.push(z); 
+                };
+
+                // First side, if an edge draw to zero else draw to previous cell so we are
+                // manifold
+                if x == 0 {
+                    add((4, 2, 0), false);
+                    add((2, 4, 6), false);
+                } else {
+                    let last_vertex = -(VERTEX_STRIDE as isize);
+                    let going_up = heightmap[(x, y)] <= heightmap[(x - 1, y)];
+                    println!("Going up: {}", going_up);
+                    add((2, 0, last_vertex + 1), true);
+                    add((2, last_vertex + 1, last_vertex + 3), true);
+                }
+
+                // Second side (pointing y north), similar shared faces to the x dir
+                if y == 0 {
+                    add((0, 4, 1), true);
+                    add((4, 5, 1), true);
+                } else {
+                    let going_down = heightmap[(x, y)] <= heightmap[(x, y - 1)];
+                    let row_stride: isize = (VERTEX_STRIDE * heightmap.width) as isize;
+                    add((0, -row_stride + 2, 1), false);
+                    add((-row_stride + 2, -row_stride + 3, 1), false);
+                }
+
+                //// Third side
+                //// Since the previous cell can share an edge we only draw this at the end
+                if x == heightmap.width - 1 {
+                    add((7, 1, 3), true);
+                    add((7, 5, 1), true);
+                }
+
+                //// Fourth side, since the previous cell can share an edge we only draw this at the
+                //// end
+                if y == heightmap.height - 1 {
+                    add((2, 6, 3), false);
+                    add((3, 6, 7), false);
+                }
+
+                //// Top
+                add((2, 1, 0), false);
+                add((2, 3, 1), false);
             }
         }
 
-        // Add Y borders
-        // This is tricky to generalize because the order of the indices effects the direction the
-        // vertices will appear from
-        for y in 0..(heightmap.height - 1) {
-            let x = 0;
-            let y1 = left_row_offset + y;
-            let y2 = left_row_offset + y + 1;
-            let y3 = heightmap.offset((x, y));
-            let y4 = heightmap.offset((x, y + 1));
+        indices.push(base_off + 2);
+        indices.push(base_off + 1);
+        indices.push(base_off );
 
-            indices.push(y1 as u32);
-            indices.push(y2 as u32);
-            indices.push(y4 as u32);
+        indices.push(base_off);
+        indices.push(base_off + 1);
+        indices.push(base_off + 2 );
 
-            indices.push(y4 as u32);
-            indices.push(y3 as u32);
-            indices.push(y1 as u32);
-        }
+        indices.push(base_off );
+        indices.push(base_off + 3);
+        indices.push(base_off + 2);
 
-        for y in 0..(heightmap.height - 1) {
-            let x = heightmap.width - 1;
-            let y1 = right_row_offset + y;
-            let y2 = right_row_offset + y + 1;
-            let y3 = heightmap.offset((x, y));
-            let y4 = heightmap.offset((x, y + 1));
-
-            indices.push(y4 as u32);
-            indices.push(y2 as u32);
-            indices.push(y1 as u32);
-
-            indices.push(y1 as u32);
-            indices.push(y3 as u32);
-            indices.push(y4 as u32);
-        }
-
-        // Add X borders
-        for x in 0..(heightmap.width - 1) {
-            let y = 0;
-            let x1 = bottom_offset + x;
-            let x2 = bottom_offset + x + 1;
-            let x3 = heightmap.offset((x, y));
-            let x4 = heightmap.offset((x + 1, y));
-
-            indices.push(x4 as u32);
-            indices.push(x2 as u32);
-            indices.push(x1 as u32);
-
-            indices.push(x1 as u32);
-            indices.push(x3 as u32);
-            indices.push(x4 as u32);
-        }
-
-        for x in 0..(heightmap.width - 1) {
-            let y = heightmap.height - 1;
-            let x1 = top_offset + x;
-            let x2 = top_offset + x + 1;
-            let x3 = heightmap.offset((x, y));
-            let x4 = heightmap.offset((x + 1, y));
-
-            indices.push(x1 as u32);
-            indices.push(x2 as u32);
-            indices.push(x4 as u32);
-
-            indices.push(x4 as u32);
-            indices.push(x3 as u32);
-            indices.push(x1 as u32);
-        }
-
-        // Add base
-        indices.push(base_offset as u32);
-        indices.push(base_offset as u32 + 1);
-        indices.push(base_offset as u32 + 2);
-
-        indices.push(base_offset as u32 + 3);
-        indices.push(base_offset as u32 + 1);
-        indices.push(base_offset as u32 + 2);
+        indices.push(base_off + 2);
+        indices.push(base_off + 3);
+        indices.push(base_off );
 
         let mut result = Model {
             vertices,

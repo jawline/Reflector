@@ -1,9 +1,9 @@
 use crate::las_data::Limits;
 use itertools::iproduct;
 use log::info;
+use remedian::RemedianBlock;
 use serde::{Deserialize, Serialize};
 use std::ops::{Index, IndexMut};
-use remedian::RemedianBlock;
 
 #[derive(Serialize, Deserialize)]
 pub struct Heightmap<T: Clone + Copy> {
