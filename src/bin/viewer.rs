@@ -81,13 +81,13 @@ fn setup(
 
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 1200.,
+        brightness: 2000.,
         affects_lightmapped_meshes: true,
     });
 
     commands.spawn((
         DirectionalLight {
-            illuminance: 350.,
+            illuminance: 650.,
             shadows_enabled: true,
             ..default()
         },

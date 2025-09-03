@@ -1,5 +1,6 @@
 use crate::heightmap::Heightmap;
 use log::info;
+use std::collections::HashSet;
 
 pub type Point = [f32; 3];
 pub type Triangle = [Point; 3];
@@ -25,23 +26,102 @@ fn quad_to_triangles(q: &Quad) -> [Triangle; 2] {
     [[q[0], q[1], q[2]], [q[2], q[3], q[0]]]
 }
 
-fn row_z_heights(
+fn find_collateable_row(
     heightmap: &Heightmap<f32>,
+ done: &HashSet<(usize, usize)>,
+    z: f32,
     (x, y): (usize, usize),
-    (xs, ys): (usize, usize),
-) -> Vec<f32> {
-    let mut result = Vec::new();
+    dirswap: bool,
+) -> usize {
+    let delta = 0.001;
+    let start = if dirswap { y } else { x };
+    let mut end = if dirswap { y } else { x };
 
-    let mut x = y;
-    let mut y = y;
+    let stop_condition = if dirswap {
+        heightmap.height - 1
+    } else {
+        heightmap.width - 1
+    };
 
-    while x < heightmap.width && y < heightmap.height {
-        result.push(heightmap[(x, y)]);
-        x += xs;
-        y += ys;
+    while end < stop_condition {
+        let lx = end + 1;
+        let index = if dirswap { (x, lx) } else { (lx, y) };
+        if !done.contains(&index) && (heightmap[index] - z).abs() < delta {
+            end += 1;
+        } else {
+            break;
+        }
     }
 
-    return result;
+    return end - start;
+}
+
+fn find_rectangle(
+    heightmap: &Heightmap<f32>,
+ done: &HashSet<(usize, usize)>,
+    z: f32,
+    (origin_x, origin_y): (usize, usize),
+    dirswap: bool,
+) -> (usize, usize) {
+    let mut thresh_x = 0;
+    let mut thresh_y = 0;
+
+    if dirswap {
+        thresh_y = find_collateable_row(heightmap, done, z, (origin_x, origin_y), true);
+    } else {
+        thresh_x = find_collateable_row(heightmap, done, z, (origin_x, origin_y), false);
+    }
+
+
+    let incr = |x: &mut usize, y: &mut usize| {
+        if dirswap {
+            *x += 1;
+        } else {
+            *y += 1;
+        }
+    };
+
+    let found_anything = thresh_x > 1 || thresh_y > 1;
+
+    if found_anything {
+        loop {
+            let cx = origin_x + thresh_x;
+            let cy = origin_y + thresh_y;
+
+            if cx >= heightmap.width - 1 || cy >= heightmap.height - 1 {
+                break;
+            }
+
+            let index = if dirswap {
+                (origin_x + thresh_x + 1, origin_y)
+            } else {
+                (origin_x, origin_y + thresh_y + 1)
+            };
+
+
+            let row = find_collateable_row(heightmap, &done, z, index, dirswap);
+            let thresh = if dirswap { thresh_y } else { thresh_x };
+
+            if row < thresh {
+                break;
+            }
+
+            incr(&mut thresh_x, &mut thresh_y);
+        }
+    }
+
+    (thresh_x, thresh_y)
+}
+
+fn find_largest_rectangle(heightmap: &Heightmap<f32>, done: &HashSet<(usize, usize)>, z: f32, p: (usize, usize)) -> (usize, usize) {
+    let (r1x, r1y) = find_rectangle(heightmap, done, z, p, false);
+    let (r2x, r2y) = find_rectangle(heightmap, done, z, p, true);
+
+    if (r1x * r1y) > (r2x * r2y) {
+        (p.0 + r1x, p.1 + r1y)
+    } else {
+        (p.0 + r2x, p.1 + r2y)
+    }
 }
 
 impl Model {
@@ -54,17 +134,7 @@ impl Model {
     }
 
     pub fn of_heightmap(heightmap: &Heightmap<f32>) -> Self {
-        let first_row_z_heights = row_z_heights(&heightmap, (0, 0), (1, 0));
-        let last_row_z_heights = row_z_heights(&heightmap, (0, heightmap.height - 1), (1, 0));
-        let first_col_z_heights = row_z_heights(&heightmap, (0, 0), (0, 1));
-        let last_col_z_heights = row_z_heights(&heightmap, (heightmap.width - 1, 0), (0, 1));
-        let extent_z_heights: Vec<f32> = first_row_z_heights
-            .iter()
-            .chain(last_row_z_heights.iter())
-            .chain(first_col_z_heights.iter())
-            .chain(last_col_z_heights.iter())
-            .cloned()
-            .collect();
+        let mut done: HashSet<(usize, usize)> = HashSet::new();
         let mut quads = Vec::new();
 
         info!(
@@ -74,20 +144,39 @@ impl Model {
 
         for y in 0..heightmap.height {
             for x in 0..heightmap.width {
+                if done.contains(&(x, y)) {
+                    continue;
+                }
                 let z = heightmap[(x, y)];
+
+                let (end_x, end_y) = find_largest_rectangle(heightmap, &done, z, (x, y));
+
+                if x != end_x || y != end_y {
+                }
+
+                for y in y..=end_y {
+                    for x in x..=end_x {
+                        done.insert((x, y));
+                    }
+                }
 
                 let point_to_vertex = |pt, z, lz| {
                     let x = x as f32;
                     let y = y as f32;
+                    let end_x = end_x as f32;
+                    let end_y = end_y as f32;
+                    let ex = 1. + (end_x - x);
+                    let ey = 1. + (end_y - y);
+
                     match pt {
                         0 => [x, y, z],
-                        1 => [x + 1., y, z],
-                        2 => [x + 1., y + 1., z],
-                        3 => [x, y + 1., z],
+                        1 => [x + ex, y, z],
+                        2 => [x + ex, y + ey, z],
+                        3 => [x, y + ey, z],
                         4 => [x, y, lz],
-                        5 => [x + 1., y, lz],
-                        6 => [x + 1., y + 1., lz],
-                        7 => [x, y + 1., lz],
+                        5 => [x + ex, y, lz],
+                        6 => [x + ex, y + ey, lz],
+                        7 => [x, y + ey, lz],
                         _ => panic!("impossible point"),
                     }
                 };
@@ -107,10 +196,10 @@ impl Model {
                 // Base
                 add(&mut quads, (5, 4, 7, 6), z, 0.);
 
-                // X 
+                // X
                 add(&mut quads, (4, 5, 1, 0), z, 0.);
-                
-                // Y 
+
+                // Y
                 add(&mut quads, (0, 3, 7, 4), z, 0.);
 
                 // X2
