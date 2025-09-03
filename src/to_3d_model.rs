@@ -151,17 +151,14 @@ impl Model {
                         extent_z_heights.iter().for_each(|&x| {
                             heights.push(x);
                         });
-                        if first {
-                        } else {
-                            heights.push(last_z_x);
-                            heights.push(next_z_x);
-                            heights.push(last_z_y);
-                            heights.push(next_z_y);
-                            heights.push(last_diag_1);
-                            heights.push(next_diag_1);
-                            heights.push(last_diag_2);
-                            heights.push(next_diag_2);
-                        }
+                        heights.push(last_z_x);
+                        heights.push(next_z_x);
+                        heights.push(last_z_y);
+                        heights.push(next_z_y);
+                        heights.push(last_diag_1);
+                        heights.push(next_diag_1);
+                        heights.push(last_diag_2);
+                        heights.push(next_diag_2);
 
                         heights.retain(|&x| x >= min_z && x <= max_z);
 
@@ -185,7 +182,13 @@ impl Model {
                         heights.push(x);
                     });
 
+                    heights.push(last_z_x);
+                    heights.push(next_z_x);
+                    heights.push(last_z_y);
+                    heights.push(next_z_y);
+
                     heights.sort_by(f32::total_cmp);
+                    heights.retain(|&x| x <= z);
                     heights.dedup();
 
                     for i in 1..heights.len() {
