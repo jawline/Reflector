@@ -88,6 +88,28 @@ impl Model {
                     heightmap[(x, y + 1)]
                 };
 
+                let last_diag_1 = if x == 0 || y == 0 {
+                    0.
+                } else {
+                    heightmap[(x - 1, y - 1)]
+                };
+                let next_diag_1 = if x == heightmap.width - 1 || y == heightmap.height - 1 {
+                    0.
+                } else {
+                    heightmap[(x + 1, y + 1)]
+                };
+
+                let last_diag_2 = if x == 0 || y == heightmap.height - 1 {
+                    0.
+                } else {
+                    heightmap[(x - 1, y + 1)]
+                };
+                let next_diag_2 = if x == heightmap.width - 1 || y == 0 {
+                    0.
+                } else {
+                    heightmap[(x + 1, y - 1)]
+                };
+
                 let point_to_vertex = |pt, z, lz| {
                     let x = x as f32;
                     let y = y as f32;
@@ -104,49 +126,54 @@ impl Model {
                     }
                 };
 
-                let add = |quads: &mut Vec<Quad>, (a, b, c, d): (usize, usize, usize, usize), hz, lz| {
-                    let pa = point_to_vertex(a, hz, lz);
-                    let pb = point_to_vertex(b, hz, lz);
-                    let pc = point_to_vertex(c, hz, lz);
-                    let pd = point_to_vertex(d, hz, lz);
-                    quads.push([pa, pb, pc, pd]);
-                };
+                let add =
+                    |quads: &mut Vec<Quad>, (a, b, c, d): (usize, usize, usize, usize), hz, lz| {
+                        let pa = point_to_vertex(a, hz, lz);
+                        let pb = point_to_vertex(b, hz, lz);
+                        let pc = point_to_vertex(c, hz, lz);
+                        let pd = point_to_vertex(d, hz, lz);
+                        quads.push([pa, pb, pc, pd]);
+                    };
 
+                let compute_left_extent =
+                    |quads: &mut Vec<Quad>, first, up_face, down_face, last_z| {
+                        let mut heights = Vec::new();
 
-                let compute_left_extent = |quads: &mut Vec<Quad>, first, up_face, down_face, last_z| {
-                    let mut heights = Vec::new();
+                        heights.push(z);
+                        heights.push(last_z);
+                        let up = z > last_z;
 
-                    heights.push(z);
-                    heights.push(last_z);
-                    let up = z > last_z;
+                        heights.sort_by(f32::total_cmp);
 
-                    heights.sort_by(f32::total_cmp);
+                        let min_z = heights[0];
+                        let max_z = heights[1];
 
-                    let min_z = heights[0];
-                    let max_z = heights[1];
-
-                        extent_z_heights.iter().filter(|&&x| x < z).for_each(|&x| {
+                        extent_z_heights.iter().for_each(|&x| {
                             heights.push(x);
                         });
-                    if first {
-                    } else {
-                        heights.push(last_z_x);
-                        heights.push(next_z_x);
-                        heights.push(last_z_y);
-                        heights.push(next_z_y);
-                    }
+                        if first {
+                        } else {
+                            heights.push(last_z_x);
+                            heights.push(next_z_x);
+                            heights.push(last_z_y);
+                            heights.push(next_z_y);
+                            heights.push(last_diag_1);
+                            heights.push(next_diag_1);
+                            heights.push(last_diag_2);
+                            heights.push(next_diag_2);
+                        }
 
-                    heights.retain(|&x| x >= min_z && x <= max_z);
+                        heights.retain(|&x| x >= min_z && x <= max_z);
 
-                    heights.sort_by(f32::total_cmp);
-                    heights.dedup();
+                        heights.sort_by(f32::total_cmp);
+                        heights.dedup();
 
-                    let face = if up { up_face } else { down_face };
+                        let face = if up { up_face } else { down_face };
 
-                    for i in 1..heights.len() {
-                        add(&mut *quads, face, heights[i], heights[i - 1]);
-                    }
-                };
+                        for i in 1..heights.len() {
+                            add(&mut *quads, face, heights[i], heights[i - 1]);
+                        }
+                    };
 
                 let compute_right_extent = |quads: &mut Vec<Quad>, face| {
                     let mut heights = Vec::new();
