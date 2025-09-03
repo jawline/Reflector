@@ -83,10 +83,10 @@ def main():
         print(inferred_frame.shape)
 
         result = {
-            "data": inferred_frame.flatten().tolist(),
-            "width": inferred_frame.shape[-1],
-            "height": inferred_frame.shape[-2],
-            "scale_z": sample["scale_z"],
+            "data": tensor([1,2]).flatten().tolist(), #inferred_frame.flatten().tolist(),
+            "width": 2, # inferred_frame.shape[-1],
+            "height": 1, # inferred_frame.shape[-2],
+            "scale_z": 1 #sample["scale_z"],
         }
 
         with open("out.pt", "wb") as f:

@@ -8,6 +8,7 @@ use bevy::{
         fxaa::Fxaa,
         prepass::{DeferredPrepass, DepthPrepass},
     },
+    input::ButtonState,
     pbr::CascadeShadowConfigBuilder,
 };
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
@@ -61,7 +62,7 @@ fn setup(
     let heightmap = read(&args.input_path).unwrap();
     let heightmap: Heightmap<Option<f32>> =
         serde_pickle::from_slice(&heightmap, DeOptions::new()).unwrap();
-    let heightmap = heightmap.fill_none_with_zero_and_add_base(0.1, 0.1);
+    let heightmap = heightmap.fill_none_with_zero_and_add_base(0.0, 0.0);
     let mesh = heightmap_to_mesh_and_image(&heightmap);
     let (start_x, start_y) = (heightmap.width as f32 / 2., heightmap.height as f32 / 2.);
 
@@ -121,6 +122,11 @@ fn print_keyboard_event_system(
 ) {
     for event in keyboard_input_events.read() {
         info!("{:?}", event);
-        wireframe_config.global = !wireframe_config.global;
+        match event.state {
+            ButtonState::Pressed => {
+                wireframe_config.global = !wireframe_config.global;
+            }
+            ButtonState::Released => (),
+        };
     }
 }
