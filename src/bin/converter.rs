@@ -2,7 +2,7 @@ use clap::Parser;
 use log::{error, info, warn};
 use rust_las_printer::heightmap::{Heightmap, InterpolationMode, StreamingHeightmap};
 use rust_las_printer::las_data::{load_from_directory, LasType, Limits};
-use rust_las_printer::to_3d_model::Model;
+use rust_las_printer::renderer::to_3d_model;
 use rust_las_printer::to_obj::to_obj;
 use rust_las_printer::to_stl::to_stl;
 use serde_pickle::{DeOptions, SerOptions};
@@ -184,13 +184,13 @@ fn main() {
 
         match write_to {
             WriteTo::Stl => {
-                let model = Model::of_heightmap(&grid_zones);
+                let model = to_3d_model::of_heightmap(&grid_zones, &to_3d_model::Mode::default());
                 let mesh = to_stl(&model);
                 let mut file = File::create(args.output_path).unwrap();
                 stl_io::write_stl(&mut file, mesh.into_iter()).unwrap()
             }
             WriteTo::Obj => {
-                let model = Model::of_heightmap(&grid_zones);
+                let model = to_3d_model::of_heightmap(&grid_zones, &to_3d_model::Mode::default());
                 let mesh = to_obj(&model);
                 ObjWriter::write_mesh(&mesh, args.output_path).unwrap();
             }

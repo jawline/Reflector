@@ -24,7 +24,9 @@ clap = { version = "4.3.1", features = ["derive"] }
 env_logger = "0.10.0"
 itertools = "0.10.5"
 las = { version = "0.8.1", features = ["laz"] }
+lin_alg = "1.3.6"
 log = "0.4.18"
+mcubes = "0.1.5"
 medians = "2.2.6"
 png = "0.17.8"
 postcard = { version = "1.0.4", features = ["alloc", "use-std"] }
@@ -33,6 +35,7 @@ quantogram = "0.4.4"
 remedian = "0.1.0"
 serde = "1.0.163"
 serde-pickle = "1.2.0"
+smooth-bevy-cameras = "0.14.0"
 stl_io = "0.7.0"
 threadpool = "1.8.1"
 threecrate-core = "0.3.1"
@@ -43,4 +46,3 @@ walkdir = "2.3.3"
 [profile.release]
 codegen-units = 1
 debug = false
-lto = "fat"

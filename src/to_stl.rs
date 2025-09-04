@@ -1,4 +1,4 @@
-use crate::to_3d_model::Model;
+use crate::renderer::types::Model;
 use bevy::math::Vec3;
 use log::debug;
 use stl_io::{Triangle, Vector};
@@ -9,10 +9,14 @@ pub fn to_stl(model: &Model) -> Vec<Triangle> {
     let mut output = Vec::new();
 
     for triangle in &model.triangles {
+        let vertex1 = model.vertices[triangle[0]];
+        let vertex2 = model.vertices[triangle[1]];
+        let vertex3 = model.vertices[triangle[2]];
+
         // CCW order
-        let vertex1 = Vec3::from(triangle[0].clone());
-        let vertex2 = Vec3::from(triangle[1].clone());
-        let vertex3 = Vec3::from(triangle[2].clone());
+        let vertex1 = Vec3::from(vertex1);
+        let vertex2 = Vec3::from(vertex2);
+        let vertex3 = Vec3::from(vertex3);
 
         let u = vertex2 - vertex1;
         let v = vertex3 - vertex1;

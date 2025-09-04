@@ -1,7 +1,7 @@
 use bevy::input::keyboard::KeyboardInput;
 use bevy::pbr::wireframe::{WireframeConfig, WireframePlugin};
 use bevy::prelude::*;
-use bevy::render::render_resource::PrimitiveTopology;
+use bevy::render::{mesh::Indices, render_resource::PrimitiveTopology};
 use bevy::{
     asset::RenderAssetUsages,
     core_pipeline::{
@@ -15,9 +15,9 @@ use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use clap::Parser;
 use env_logger;
 use log::info;
-use rust_las_printer::{heightmap::Heightmap, to_3d_model::Model};
+use rust_las_printer::{heightmap::Heightmap, renderer::to_3d_model};
 use std::fs::read;
-
+use std::f32::consts::PI;
 use serde_pickle::DeOptions;
 
 #[derive(Parser, Debug)]
@@ -37,16 +37,23 @@ fn main() {
 }
 
 fn heightmap_to_mesh_and_image(heightmap: &Heightmap<f32>) -> Mesh {
-    let model = Model::of_heightmap(&heightmap);
+    let model = to_3d_model::of_heightmap(&heightmap, &to_3d_model::Mode::default());
 
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),
     );
 
-    let vertices_in_order: Vec<[f32; 3]> = model.triangles.iter().flat_map(|x| x.clone()).collect();
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices_in_order);
-    mesh.compute_flat_normals();
+    let vertices: Vec<[f32; 3]> = model.vertices.into_iter().collect();
+    let indices: Vec<u32> = model
+        .triangles
+        .into_iter()
+        .flat_map(|x| x)
+        .map(|x| x as u32)
+        .collect();
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+    mesh.insert_indices(Indices::U32(indices));
+    mesh.compute_smooth_normals();
 
     mesh
 }
@@ -62,7 +69,7 @@ fn setup(
     let heightmap = read(&args.input_path).unwrap();
     let heightmap: Heightmap<Option<f32>> =
         serde_pickle::from_slice(&heightmap, DeOptions::new()).unwrap();
-    let heightmap = heightmap.fill_none_with_zero_and_add_base(0.0, 0.0);
+    let heightmap = heightmap.fill_none_with_zero_and_add_base(0.0, 0.1); // TODO: Renormalize
     let mesh = heightmap_to_mesh_and_image(&heightmap);
     let (start_x, start_y) = (heightmap.width as f32 / 2., heightmap.height as f32 / 2.);
 
@@ -85,20 +92,27 @@ fn setup(
         affects_lightmapped_meshes: true,
     });
 
+
     commands.spawn((
         DirectionalLight {
-            illuminance: 650.,
+            illuminance: light_consts::lux::OVERCAST_DAY,
             shadows_enabled: true,
             ..default()
         },
+        Transform {
+            translation: Vec3::new(start_x, 100., start_y),
+            rotation: Quat::from_rotation_x(-PI / 4.),
+            ..default()
+        },
+        // The default cascade config is designed to handle large scenes.
+        // As this example has a much smaller world, we can tighten the shadow
+        // bounds for better visual quality.
         CascadeShadowConfigBuilder {
-            num_cascades: 3,
-            maximum_distance: 10.0,
+            first_cascade_far_bound: 4.0,
+            maximum_distance: 100000.0,
             ..default()
         }
         .build(),
-        Transform::from_xyz(start_x, 500., start_y)
-            .looking_at((start_x, 0., start_y).into(), Vec3::Y),
     ));
 
     commands.spawn((

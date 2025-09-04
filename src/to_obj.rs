@@ -1,6 +1,7 @@
-use crate::to_3d_model::Model;
+//use crate::to_3d_model::Model;
 //use crate::to_3d_model::TriangleCCW;
 //use bevy::math::Vec3;
+use crate::renderer::types::Model;
 use log::debug;
 //use stl_io::{Triangle, Vector};
 use threecrate_core::mesh::TriangleMesh;
