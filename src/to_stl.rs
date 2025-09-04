@@ -13,7 +13,6 @@ pub fn to_stl(model: &Model) -> Vec<Triangle> {
         let vertex2 = model.vertices[triangle[1]];
         let vertex3 = model.vertices[triangle[2]];
 
-        // CCW order
         let vertex1 = Vec3::from(vertex1);
         let vertex2 = Vec3::from(vertex2);
         let vertex3 = Vec3::from(vertex3);
@@ -22,11 +21,6 @@ pub fn to_stl(model: &Model) -> Vec<Triangle> {
         let v = vertex3 - vertex1;
         let n = u.cross(v);
         let normal = n.normalize();
-
-        //println!("{:?} {:?} {:?}", vertex1, vertex2, vertex3);
-        //println!("U {:?} V {:?}", u, v);
-        //println!("N {:?}", n);
-        //println!("{:?}", normal);
 
         let triangle = Triangle {
             normal: Vector::new(normal.into()),

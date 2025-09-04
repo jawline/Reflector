@@ -28,7 +28,7 @@ fn main() {
     let args = Args::parse();
     let header = find_a_header(&args.input_directory);
 
-    println!("First pass, collecting limits");
+    info!("First pass, collecting limits");
     let limits = Limits::load_from_directory(&args.input_directory, 1);
 
     info!(
@@ -36,12 +36,12 @@ fn main() {
         limits.min_x, limits.max_x, limits.min_y, limits.max_y, limits.min_z, limits.max_z
     );
 
-    println!("Main pass, summarizing grid squares");
+    info!("Main pass, summarizing grid squares");
 
     let x_div = (limits.max_x - limits.min_x) / (args.files_x_dim as f32);
     let y_div = (limits.max_y - limits.min_y) / (args.files_y_dim as f32);
 
-    println!("XDIV: {} YDIV: {}", x_div, y_div);
+    info!("XDIV: {} YDIV: {}", x_div, y_div);
 
     let mut file_grid = Vec::new();
 
