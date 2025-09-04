@@ -147,8 +147,7 @@ fn render(args: Render) {
     let grid_zones = read(&args.read_from).unwrap();
     let grid_zones: Heightmap<Option<f32>> =
         serde_pickle::from_slice(&grid_zones, DeOptions::new()).unwrap();
-    //let grid_zones: Heightmap<Option<f32>> =
-    //    Heightmap::<Option<f32>>::of_nan_as_none(grid_zones);
+
     info!("Doing hole filling");
 
     let grid_zones = (0..args.rounds_of_interpolated_hole_filling).fold(grid_zones, |acc, i| {
@@ -176,7 +175,7 @@ fn render(args: Render) {
         }
         Format::Obj => {
             let model = to_3d_model::of_heightmap(&grid_zones, &to_3d_model::Mode::default());
-            let mesh = to_obj(&model);
+            let mesh = to_obj(model);
             ObjWriter::write_mesh(&mesh, args.write_to).unwrap();
         }
     };
