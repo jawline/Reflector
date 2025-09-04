@@ -104,6 +104,84 @@ fn merge(terrain: &mut Heightmap<Option<f32>>, building: &Heightmap<Option<f32>>
     }
 }
 
+fn generate_heightmap(args: GenerateHeightmap) {
+    info!("First pass, collecting limits");
+    let limits = Limits::load_from_directory(&args.las_folder_path, args.max_threads);
+
+    info!(
+        "Bounds: {} {} {} {} {} {}",
+        limits.min_x, limits.max_x, limits.min_y, limits.max_y, limits.min_z, limits.max_z
+    );
+
+    info!("Main pass, summarizing grid squares");
+
+    // We merge the medians for the buildings and the medians for terrain and then make sure
+    // the buildings take precedent. I have found this to be anecdotally better than just a
+    // median since you get less noisy data but don't end up with weird looking underpasses.
+    let mut grid_zones = build_terrain_map(&limits, &args);
+    let buildings = build_building_map(&limits, &args);
+    merge(&mut grid_zones, &buildings);
+
+    info!("Flipping the Y axis");
+    let grid_zones = grid_zones.flip_y();
+
+    let proportion_of_empty_cells = grid_zones.proportion_of_empty_cells();
+    info!("Proportion of empty cells: {}", proportion_of_empty_cells);
+
+    if proportion_of_empty_cells > 0.5 {
+        warn!("BAD INPUT: With this upscaling, more than 50% of the pixels are none.");
+    }
+
+    if grid_zones.proportion_of_empty_cells() > 0.75 {
+        error!("REJECTING INPUT DUE TO HIGH PROPORTION OF ERRORS");
+    } else {
+        let mut file = File::create(args.output_path).unwrap();
+        let min_z = grid_zones.min_z();
+        let max_z = grid_zones.max_z();
+        let grid_zones = grid_zones.normalize_z_by(min_z, max_z);
+        serde_pickle::to_writer(&mut file, &grid_zones, SerOptions::new()).unwrap();
+    }
+}
+
+fn render(args: Render) {
+    let grid_zones = read(&args.read_from).unwrap();
+    let grid_zones: Heightmap<Option<f32>> =
+        serde_pickle::from_slice(&grid_zones, DeOptions::new()).unwrap();
+    //let grid_zones: Heightmap<Option<f32>> =
+    //    Heightmap::<Option<f32>>::of_nan_as_none(grid_zones);
+    info!("Doing hole filling");
+
+    let grid_zones = (0..args.rounds_of_interpolated_hole_filling).fold(grid_zones, |acc, i| {
+        info!("Neighbor filling round {}", i);
+        acc.interpolate_missing_using_neighbors(
+            InterpolationMode::Min,
+            args.consider_nearest_n_neighbors_for_interpolation,
+        )
+    });
+
+    // Here every point will be some
+    info!("Normalizing Z axis");
+    let grid_zones = grid_zones.fill_none_with_zero_and_add_base(
+        args.base_depth,
+        args.override_base_depth_for_tiles_with_no_data
+            .unwrap_or(args.base_depth),
+    );
+
+    match args.format {
+        Format::Stl => {
+            let model = to_3d_model::of_heightmap(&grid_zones, &to_3d_model::Mode::default());
+            let mesh = to_stl(&model);
+            let mut file = File::create(args.write_to).unwrap();
+            stl_io::write_stl(&mut file, mesh.into_iter()).unwrap()
+        }
+        Format::Obj => {
+            let model = to_3d_model::of_heightmap(&grid_zones, &to_3d_model::Mode::default());
+            let mesh = to_obj(&model);
+            ObjWriter::write_mesh(&mesh, args.write_to).unwrap();
+        }
+    };
+}
+
 fn main() {
     env_logger::init();
 
@@ -111,85 +189,10 @@ fn main() {
 
     match args {
         Args::GenerateHeightmap(args) => {
-            info!("Producing a sample and preparing for upscaling");
-
-            info!("First pass, collecting limits");
-            let limits = Limits::load_from_directory(&args.las_folder_path, args.max_threads);
-
-            info!(
-                "Bounds: {} {} {} {} {} {}",
-                limits.min_x, limits.max_x, limits.min_y, limits.max_y, limits.min_z, limits.max_z
-            );
-
-            info!("Main pass, summarizing grid squares");
-
-            // We merge the medians for the buildings and the medians for terrain and then make sure
-            // the buildings take precedent. I have found this to be anecdotally better than just a
-            // median since you get less noisy data but don't end up with weird looking underpasses.
-            let mut grid_zones = build_terrain_map(&limits, &args);
-            let buildings = build_building_map(&limits, &args);
-            merge(&mut grid_zones, &buildings);
-
-            info!("Flipping the Y axis");
-            let grid_zones = grid_zones.flip_y();
-
-            let proportion_of_empty_cells = grid_zones.proportion_of_empty_cells();
-            info!("Proportion of empty cells: {}", proportion_of_empty_cells);
-
-            if proportion_of_empty_cells > 0.5 {
-                warn!("BAD INPUT: With this upscaling, more than 50% of the pixels are none.");
-            }
-
-            if grid_zones.proportion_of_empty_cells() > 0.75 {
-                error!("REJECTING INPUT DUE TO HIGH PROPORTION OF ERRORS");
-            } else {
-                let mut file = File::create(args.output_path).unwrap();
-                let min_z = grid_zones.min_z();
-                let max_z = grid_zones.max_z();
-                let grid_zones = grid_zones.normalize_z_by(min_z, max_z);
-                serde_pickle::to_writer(&mut file, &grid_zones, SerOptions::new()).unwrap();
-            }
+            generate_heightmap(args);
         }
         Args::Render(args) => {
-            let grid_zones = read(&args.read_from).unwrap();
-            let grid_zones: Heightmap<Option<f32>> =
-                serde_pickle::from_slice(&grid_zones, DeOptions::new()).unwrap();
-            //let grid_zones: Heightmap<Option<f32>> =
-            //    Heightmap::<Option<f32>>::of_nan_as_none(grid_zones);
-            info!("Doing hole filling");
-
-            let grid_zones =
-                (0..args.rounds_of_interpolated_hole_filling).fold(grid_zones, |acc, i| {
-                    info!("Neighbor filling round {}", i);
-                    acc.interpolate_missing_using_neighbors(
-                        InterpolationMode::Min,
-                        args.consider_nearest_n_neighbors_for_interpolation,
-                    )
-                });
-
-            // Here every point will be some
-            info!("Normalizing Z axis");
-            let grid_zones = grid_zones.fill_none_with_zero_and_add_base(
-                args.base_depth,
-                args.override_base_depth_for_tiles_with_no_data
-                    .unwrap_or(args.base_depth),
-            );
-
-            match args.format {
-                Format::Stl => {
-                    let model =
-                        to_3d_model::of_heightmap(&grid_zones, &to_3d_model::Mode::default());
-                    let mesh = to_stl(&model);
-                    let mut file = File::create(args.write_to).unwrap();
-                    stl_io::write_stl(&mut file, mesh.into_iter()).unwrap()
-                }
-                Format::Obj => {
-                    let model =
-                        to_3d_model::of_heightmap(&grid_zones, &to_3d_model::Mode::default());
-                    let mesh = to_obj(&model);
-                    ObjWriter::write_mesh(&mesh, args.write_to).unwrap();
-                }
-            };
+            render(args);
         }
     }
 }
