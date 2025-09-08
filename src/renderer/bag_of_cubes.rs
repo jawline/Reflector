@@ -211,6 +211,9 @@ pub fn of_heightmap(heightmap: &Heightmap<f32>) -> Model {
         }
     }
 
+
+    info!("Producing triangles");
+
     let mut triangle_indices = HashMap::new();
 
     let mut vertices = Vec::new();
@@ -235,12 +238,17 @@ pub fn of_heightmap(heightmap: &Heightmap<f32>) -> Model {
         triangles.push([q2, q3, q0]);
     };
 
+    info!("Processing {} quads", quads.len());
+
     quads.into_iter().for_each(|quad| quad_to_triangles(&quad));
+
 
     let mut result = Model {
         vertices,
         triangles,
     };
+
+    info!("Scaling");
 
     result.scale((1., 1., heightmap.scale_z));
     result

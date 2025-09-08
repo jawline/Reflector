@@ -148,7 +148,7 @@ def train_auto(
             # Generate a bunch of random numbers (batch_size,) between 0 and 1 for a known noise addition
             # Add some more noise to the image so the decoder can see some blank cells
             min_noise = 0.01
-            max_noise = 0.1
+            max_noise = 0.35
             noise_thresh_per_batch_elt = (
                 min_noise + (rand((batch_size, 1, 1, 1)) * (max_noise - min_noise))
             ).to(device)
