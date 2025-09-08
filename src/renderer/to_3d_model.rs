@@ -3,44 +3,25 @@ use super::marching_cubes;
 use super::terrain;
 use super::types::Model;
 use crate::heightmap::Heightmap;
-use std::collections::HashMap;
+use clap::{Parser, ValueEnum};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(PartialEq, Parser, Eq, Debug, Clone, Copy, ValueEnum, Default)]
+#[clap(rename_all = "kebab-case")]
 pub enum Mode {
     Terrain,
     BagOfCubes,
-    MarchingCubes { z_steps: usize },
-}
-
-impl Mode {
-    pub fn default() -> Self {
-        Self::MarchingCubes { z_steps: 512 }
-    }
-
-    pub fn mode_names() -> HashMap<String, Mode> {
-        HashMap::from([
-            ("terrain".to_string(), Mode::Terrain),
-            ("bag-of-cubes".to_string(), Mode::BagOfCubes),
-            (
-                "marching-cubes-low".to_string(),
-                Mode::MarchingCubes { z_steps: 128 },
-            ),
-            (
-                "marching-cubes".to_string(),
-                Mode::MarchingCubes { z_steps: 512 },
-            ),
-        ])
-    }
-
-    pub fn of_string(s: &str) -> Mode {
-        *Self::mode_names().get(s).unwrap()
-    }
+    MarchingCubesLow,
+    #[default]
+    MarchingCubesMedium,
+    MarchingCubesHigh,
 }
 
 pub fn of_heightmap(heightmap: &Heightmap<f32>, mode: &Mode) -> Model {
     match mode {
         Mode::BagOfCubes => bag_of_cubes::of_heightmap(heightmap),
-        Mode::MarchingCubes { z_steps } => marching_cubes::of_heightmap(heightmap, *z_steps),
+        Mode::MarchingCubesLow => marching_cubes::of_heightmap(heightmap, 128),
+        Mode::MarchingCubesMedium => marching_cubes::of_heightmap(heightmap, 256),
+        Mode::MarchingCubesHigh => marching_cubes::of_heightmap(heightmap, 512),
         Mode::Terrain => terrain::of_heightmap(heightmap),
     }
 }

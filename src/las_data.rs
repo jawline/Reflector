@@ -28,7 +28,7 @@ impl LasType {
                 _ => false,
             },
             LasType::Buildings => match classification {
-                Building | RoadSurface | BridgeDeck | Rail => true,
+                Building | RoadSurface | BridgeDeck | Rail | Unclassified=> true,
                 // TODO: Consider these, but I think they aren't good things to add | WireGuard | WireConductor | TransmissionTower | WireStructureConnector |
                 _ => false,
             },

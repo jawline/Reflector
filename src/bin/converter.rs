@@ -44,6 +44,8 @@ struct Render {
     #[clap(subcommand)]
     format: Format,
 
+    mode: to_3d_model::Mode,
+
     #[arg(short, long, default_value_t = 0.0)]
     base_depth: f32,
 
@@ -138,6 +140,8 @@ fn generate_heightmap(args: GenerateHeightmap) {
         let mut file = File::create(args.output_path).unwrap();
         let min_z = grid_zones.min_z();
         let max_z = grid_zones.max_z();
+
+        info!("Normalizing min={} max={}", min_z, max_z);
         let grid_zones = grid_zones.normalize_z_by(min_z, max_z);
         serde_pickle::to_writer(&mut file, &grid_zones, SerOptions::new()).unwrap();
     }
@@ -166,15 +170,15 @@ fn render(args: Render) {
             .unwrap_or(args.base_depth),
     );
 
+    let model = to_3d_model::of_heightmap(&grid_zones, &args.mode);
+
     match args.format {
         Format::Stl => {
-            let model = to_3d_model::of_heightmap(&grid_zones, &to_3d_model::Mode::default());
             let mesh = to_stl(&model);
             let mut file = File::create(args.write_to).unwrap();
             stl_io::write_stl(&mut file, mesh.into_iter()).unwrap()
         }
         Format::Obj => {
-            let model = to_3d_model::of_heightmap(&grid_zones, &to_3d_model::Mode::default());
             let mesh = to_obj(model);
             ObjWriter::write_mesh(&mesh, args.write_to).unwrap();
         }

@@ -24,6 +24,9 @@ use std::fs::read;
 #[command(author, version, about, long_about = None)]
 struct Args {
     input_path: String,
+
+    #[arg(short, long)]
+    mode: to_3d_model::Mode,
 }
 
 fn main() {
@@ -36,8 +39,8 @@ fn main() {
         .run();
 }
 
-fn heightmap_to_mesh_and_image(heightmap: &Heightmap<f32>) -> Mesh {
-    let model = to_3d_model::of_heightmap(&heightmap, &to_3d_model::Mode::default());
+fn heightmap_to_mesh_and_image(heightmap: &Heightmap<f32>, mode : &to_3d_model::Mode) -> Mesh {
+    let model = to_3d_model::of_heightmap(&heightmap, mode);
 
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -70,7 +73,7 @@ fn setup(
     let heightmap: Heightmap<Option<f32>> =
         serde_pickle::from_slice(&heightmap, DeOptions::new()).unwrap();
     let heightmap = heightmap.fill_none_with_zero_and_add_base(0.0, 0.1); // TODO: Renormalize
-    let mesh = heightmap_to_mesh_and_image(&heightmap);
+    let mesh = heightmap_to_mesh_and_image(&heightmap, &args.mode);
     let (start_x, start_y) = (heightmap.width as f32 / 2., heightmap.height as f32 / 2.);
 
     let base_material = materials.add(StandardMaterial {

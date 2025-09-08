@@ -209,8 +209,9 @@ impl Heightmap<Option<f32>> {
                 .iter()
                 .map(|x| match x {
                     Some(x) => {
-                        assert!((x + adjust_z) / delta >= 0.);
-                        Some((x + adjust_z) / delta)
+                        let result = (x + adjust_z) / delta ;
+                        assert!(result >= 0. && result <= 1.);
+                        Some(result)
                     }
                     None => None,
                 })
@@ -300,6 +301,7 @@ impl Heightmap<f32> {
 
 pub struct StreamingHeightmap {
     grid_zones: Vec<RemedianBlock<f32>>,
+    pixels_per_distance_unit: f32,
     grid_x: usize,
     grid_y: usize,
     ext_x: usize,
@@ -323,6 +325,7 @@ impl StreamingHeightmap {
             ext_x,
             ext_y,
             limits: limits.clone(),
+            pixels_per_distance_unit,
             grid_zones,
         }
     }
@@ -333,7 +336,7 @@ impl StreamingHeightmap {
         let grid_x = (x_ratio * self.grid_x as f32).floor() as usize;
         let grid_y = (y_ratio * self.grid_y as f32).floor() as usize;
         let zone = &mut self.grid_zones[(grid_y * self.ext_x) + grid_x];
-        zone.add_sample_point(pz);
+        zone.add_sample_point(pz * self.pixels_per_distance_unit);
     }
 
     pub fn finalize(&self) -> Heightmap<Option<f32>> {

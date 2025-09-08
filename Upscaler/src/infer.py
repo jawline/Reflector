@@ -35,10 +35,10 @@ import preprocess
 
 
 def aa(tensor):
-	resize1 = Resize(size=(tensor.shape[-2] * 2, tensor.shape[-1] * 2), antialias=True)
-	resize2 = Resize(size=(tensor.shape[-2], tensor.shape[-1]), antialias=True)
-	sharpened = adjust_sharpness(tensor, sharpness_factor=2)
-	return resize2.transform(resize1.transform(sharpened, {}), {})
+    resize1 = Resize(size=(tensor.shape[-2] * 2, tensor.shape[-1] * 2), antialias=True)
+    resize2 = Resize(size=(tensor.shape[-2], tensor.shape[-1]), antialias=True)
+    sharpened = adjust_sharpness(tensor, sharpness_factor=2)
+    return resize2.transform(resize1.transform(sharpened, {}), {})
 
 
 def display_reverse(images: List, to_file=None):
@@ -81,7 +81,6 @@ def combine_with_src_frame(src_frame, src_mask, frame):
 
 
 def infer_frame(device, src_frame, src_mask, model):
-
     with no_grad():
         encoded = model.encode((src_frame * src_mask) + (-1 * logical_not(src_mask)))
         sample = encoded.sample()
@@ -212,26 +211,30 @@ def compute_infill_keep_mask(src_mask):
 
 
 # To improve output we make sure we overlap some of the rows and columns with previous inferences during the tiled inference
-min_tile_overlap = 32
+min_tile_overlap = 64
 
 
 def tiled_inference(src_frame, src_mask, src_keep, autoencoder, kernel_size, device):
     src_frame = src_frame.to(device)
     src_mask = src_mask.to(device)
     src_keep = src_keep.to(device)
-    
+
     src_height = src_frame.shape[-2]
     src_width = src_frame.shape[-1]
 
     for start_y in range(0, src_frame.shape[-2], kernel_size - min_tile_overlap):
         print("Start y", start_y)
         for start_x in range(0, src_frame.shape[-1], kernel_size - min_tile_overlap):
+            last_x = False
+            last_y = False
 
             if start_x + kernel_size > src_width:
                 start_x -= start_x + kernel_size - src_width
+                last_x = True
 
             if start_y + kernel_size > src_height:
                 start_y -= start_y + kernel_size - src_height
+                last_y = True
 
             end_x = start_x + kernel_size
             end_y = start_y + kernel_size
@@ -240,8 +243,16 @@ def tiled_inference(src_frame, src_mask, src_keep, autoencoder, kernel_size, dev
             tile_mask = src_mask[:, :, start_y:end_y, start_x:end_x]
             tile_keep = src_keep[:, :, start_y:end_y, start_x:end_x]
 
-            print("Extracted tile shape", start_x, start_y, end_x, end_y, end_x - start_x, end_y - start_y, tile_data.shape)
-
+            print(
+                "Extracted tile shape",
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                end_x - start_x,
+                end_y - start_y,
+                tile_data.shape,
+            )
 
             tiles_that_dont_need_inference = logical_and(
                 tile_mask, logical_not(tile_keep)
@@ -252,24 +263,88 @@ def tiled_inference(src_frame, src_mask, src_keep, autoencoder, kernel_size, dev
             )
 
             if need_to_do_inference:
-                print("Inferring tile", start_x, start_y)
+                print("Inferring tile", start_x, start_y, tile_data.shape)
+
+                # TODO: The model has overfitted on seeing some noise so this is necessary to produce sane outputs. Remove the rand in training
+                additional_tile_mask = logical_and(
+                    tile_mask, rand_like(tile_data) > 0.1
+                )
+                additional_tile_data = (tile_data * additional_tile_mask) + (
+                    -1 * logical_not(additional_tile_mask)
+                )
 
                 inference = infer_frame(
                     device,
-                    tile_data,
+                    additional_tile_data,
                     tile_mask,
                     autoencoder,
                 )
+                # display_reverse(
+                #    [
+                #        additional_tile_data.to("cpu"),
+                #        additional_tile_mask.to("cpu"),
+                #        inference.to("cpu"),
+                #        ])
+
+                # Leave a little unpredicted margin at the edge of the frame to be inferred by the next iteration which will have a better picture due to the overlap.
+                # In general it seems best not to keep inferences too close to the edge as they will be better served by an overlapping subsequent inference.
+                write_back_start_x = start_x
+                write_back_end_x = end_x
+                if not last_x:
+                    write_back_end_x -= min_tile_overlap // 2
+
+                write_back_start_y = start_y
+                write_back_end_y = end_y
+                if not last_y:
+                    write_back_end_y -= min_tile_overlap // 2
+
+                print(
+                    "Write backs",
+                    write_back_start_x,
+                    write_back_end_x,
+                    write_back_start_y,
+                    write_back_end_y,
+                )
 
                 # Only keep the regions we actually inferred
-                reconstructed_frame = (tile_data * tile_mask) + (inference * tile_keep)
+                reconstructed_frame = (tile_data * logical_not(tile_keep)) + (
+                    inference * tile_keep
+                )
+                print("Reconstructed shape", reconstructed_frame.shape)
 
-                src_frame[:, :, start_y:end_y, start_x:end_x] = reconstructed_frame
-                src_mask[:,:,start_y:end_y,start_x:end_x] = ones(tile_data.shape, dtype=torch.bool)
-                src_keep[:,:,start_y:end_y,start_x:end_x] = zeros(tile_data.shape, dtype = torch.bool)
+                reconstructed_frame = reconstructed_frame[
+                    :,
+                    :,
+                    : write_back_end_y - write_back_start_y,
+                    : write_back_end_x - write_back_start_x,
+                ]
+
+                src_frame[
+                    :,
+                    :,
+                    write_back_start_y:write_back_end_y,
+                    write_back_start_x:write_back_end_x,
+                ] = reconstructed_frame
+                src_mask[
+                    :,
+                    :,
+                    write_back_start_y:write_back_end_y,
+                    write_back_start_x:write_back_end_x,
+                ] = ones(reconstructed_frame.shape, dtype=torch.bool)
+                src_keep[
+                    :,
+                    :,
+                    write_back_start_y:write_back_end_y,
+                    write_back_start_x:write_back_end_x,
+                ] = zeros(reconstructed_frame.shape, dtype=torch.bool)
 
                 #display_reverse(
                 #    [
+                #        tile_data.to("cpu"),
+                #        tile_mask.to("cpu"),
+                #        inference.to("cpu"),
+                #        tile_keep.to("cpu"),
+                #        reconstructed_frame.to("cpu"),
                 #        src_frame.to("cpu"),
                 #        src_mask.to("cpu"),
                 #    ]
@@ -297,19 +372,21 @@ def whole_datasource_tiled_inference(
     keep_mask = compute_infill_keep_mask(src_mask[0][0]).reshape(src_mask.shape)
     print("Computed infill mask")
 
-    result = tiled_inference(src_frame.clone(), src_mask, keep_mask, autoencoder, kernel_size, device)
+    result = tiled_inference(
+        src_frame.clone(), src_mask, keep_mask, autoencoder, kernel_size, device
+    )
     print("Inf result", result.shape)
 
-    #result = aa(result)
-    #print("AA result", result.shape)
+    # result = aa(result)
+    # print("AA result", result.shape)
 
-    #display_reverse(
+    # display_reverse(
     #    [
     #        src_frame.to("cpu"),
     #        src_mask.to("cpu"),
     #        keep_mask.to("cpu"),
     #        result.to("cpu"),
     #    ]
-    #)
+    # )
 
     return result

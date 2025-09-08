@@ -84,8 +84,8 @@ def main():
 
         result = {
             "data": inferred_frame.flatten().tolist(),
-            "width":  inferred_frame.shape[-1],
-            "height":  inferred_frame.shape[-2],
+            "width": inferred_frame.shape[-1],
+            "height": inferred_frame.shape[-2],
             "scale_z": sample["scale_z"],
         }
 
