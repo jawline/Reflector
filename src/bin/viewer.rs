@@ -16,9 +16,9 @@ use clap::Parser;
 use env_logger;
 use log::info;
 use rust_las_printer::{heightmap::Heightmap, renderer::to_3d_model};
-use std::fs::read;
-use std::f32::consts::PI;
 use serde_pickle::DeOptions;
+use std::f32::consts::PI;
+use std::fs::read;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -91,7 +91,6 @@ fn setup(
         brightness: 2000.,
         affects_lightmapped_meshes: true,
     });
-
 
     commands.spawn((
         DirectionalLight {
