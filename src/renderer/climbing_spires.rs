@@ -9,7 +9,6 @@ struct Spire {
     start_z: f32,
     end_z: f32,
     base: bool,
-    roof: bool,
 }
 
 fn enumerate_adjacent((x, y): (usize, usize), heightmap: &Heightmap<f32>) -> Vec<(usize, usize)> {
@@ -51,7 +50,6 @@ fn ascend_spire(previous_spire: &Spire, heightmap: &Heightmap<f32>) -> Vec<Spire
                 points: HashSet::new(),
                 start_z: previous_spire.end_z,
                 end_z: heightmap[off],
-                roof: false,
                 base: false,
             };
 
@@ -103,7 +101,6 @@ fn base_spires(heightmap: &Heightmap<f32>) -> Vec<Spire> {
         start_z: -10000., // Arbitrary, needs to be below the world
         end_z: 0.0,       // Needs to be where the world starts
         base: false, // Doesn't matter, this isn't an included spire.
-        roof: false, // Doesn't matter, this isn't an included spire.
     };
 
     let mut result = ascend_spire(&fake_base, heightmap);
@@ -121,10 +118,6 @@ fn discover_spires(heightmap: &Heightmap<f32>) -> Vec<Spire> {
 
     while i < worklist.len() {
         let spires_above = ascend_spire(&worklist[i], heightmap);
-
-        if spires_above.len() == 0 {
-            worklist[i].roof = true;
-        }
 
         for spire in spires_above {
             worklist.push(spire);
