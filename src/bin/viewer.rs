@@ -39,7 +39,7 @@ fn main() {
         .run();
 }
 
-fn heightmap_to_mesh_and_image(heightmap: &Heightmap<f32>, mode : &to_3d_model::Mode) -> Mesh {
+fn heightmap_to_mesh_and_image(heightmap: &Heightmap<f32>, mode: &to_3d_model::Mode) -> Mesh {
     let model = to_3d_model::of_heightmap(&heightmap, mode);
 
     let mut mesh = Mesh::new(

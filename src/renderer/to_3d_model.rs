@@ -1,4 +1,5 @@
 use super::bag_of_cubes;
+use super::climbing_spires;
 use super::marching_cubes;
 use super::terrain;
 use super::types::Model;
@@ -14,6 +15,7 @@ pub enum Mode {
     #[default]
     MarchingCubesMedium,
     MarchingCubesHigh,
+    ClimbingSpires,
 }
 
 pub fn of_heightmap(heightmap: &Heightmap<f32>, mode: &Mode) -> Model {
@@ -22,6 +24,7 @@ pub fn of_heightmap(heightmap: &Heightmap<f32>, mode: &Mode) -> Model {
         Mode::MarchingCubesLow => marching_cubes::of_heightmap(heightmap, 128),
         Mode::MarchingCubesMedium => marching_cubes::of_heightmap(heightmap, 256),
         Mode::MarchingCubesHigh => marching_cubes::of_heightmap(heightmap, 512),
+        Mode::ClimbingSpires => climbing_spires::of_heightmap(heightmap),
         Mode::Terrain => terrain::of_heightmap(heightmap),
     }
 }

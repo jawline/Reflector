@@ -209,7 +209,7 @@ impl Heightmap<Option<f32>> {
                 .iter()
                 .map(|x| match x {
                     Some(x) => {
-                        let result = (x + adjust_z) / delta ;
+                        let result = (x + adjust_z) / delta;
                         assert!(result >= 0. && result <= 1.);
                         Some(result)
                     }
