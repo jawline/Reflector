@@ -22,11 +22,8 @@ fn enumerate_adjacent((x, y): (usize, usize), heightmap: &Heightmap<f32>) -> Vec
     let max_x = if x == heightmap.width - 1 { x } else { x + 1 };
     let max_y = if y == heightmap.height - 1 { y } else { y + 1 };
 
-    debug!("{} {} bounds {} {} {} {}", x, y, min_x, min_y, max_x, max_y);
-
     for px in min_x..=max_x {
         for py in min_y..=max_y {
-            debug!("iter {} {}", px, py);
             if px != x || py != y {
                 result.push((px, py));
             }
@@ -37,18 +34,21 @@ fn enumerate_adjacent((x, y): (usize, usize), heightmap: &Heightmap<f32>) -> Vec
 }
 
 fn ascend_spire(previous_spire: &Spire, heightmap: &Heightmap<f32>) -> Vec<Spire> {
-    let included_points: HashSet<(usize, usize)> = HashSet::from_iter(
-        previous_spire
-            .points
-            .iter()
-            .cloned()
-            .filter(|&off| heightmap[off] > previous_spire.end_z),
+    debug!(
+        "scanning for next spire {} {} {}",
+        previous_spire.start_z,
+        previous_spire.end_z,
+        previous_spire.points.len()
     );
+
     let mut handled_points = HashSet::new();
     let mut result_spires = Vec::new();
 
-    for &off in included_points.iter() {
-        if !handled_points.contains(&off) {
+    let continues =
+        |off| previous_spire.points.contains(&off) && heightmap[off] > previous_spire.end_z;
+
+    for &off in previous_spire.points.iter() {
+        if continues(off) && !handled_points.contains(&off) {
             let mut new_spire = Spire {
                 points: HashSet::new(),
                 start_z: previous_spire.end_z,
@@ -62,9 +62,6 @@ fn ascend_spire(previous_spire: &Spire, heightmap: &Heightmap<f32>) -> Vec<Spire
             let mut work_list = Vec::new();
 
             let adjacent_points = enumerate_adjacent(off, heightmap);
-
-            debug!("Adjacent {:?} {:?}", off, adjacent_points);
-
             work_list.extend(adjacent_points);
 
             let mut i = 0;
@@ -72,7 +69,7 @@ fn ascend_spire(previous_spire: &Spire, heightmap: &Heightmap<f32>) -> Vec<Spire
             while i < work_list.len() {
                 let off = work_list[i];
 
-                if included_points.contains(&off) && !handled_points.contains(&off) {
+                if continues(off) && !handled_points.contains(&off) {
                     handled_points.insert(off);
                     new_spire.points.insert(off);
                     new_spire.end_z = new_spire.end_z.min(heightmap[off]);
@@ -139,9 +136,8 @@ fn draw_spire(quads: &mut Vec<Quad>, spire: &Spire, heightmap: &Heightmap<f32>) 
         let point_to_vertex = |pt| {
             let x = x as f32;
             let y = y as f32;
-            let ex =  1.;
-            let ey =  1.;
-            println!("{} {} {} {}", x, y, ex, ey);
+            let ex = 1.;
+            let ey = 1.;
 
             match pt {
                 0 => [x, y, spire.end_z],
@@ -180,7 +176,7 @@ fn draw_spire(quads: &mut Vec<Quad>, spire: &Spire, heightmap: &Heightmap<f32>) 
         }
 
         // Y
-        if !spire.points.contains(&(x - 1, y )) {
+        if !spire.points.contains(&(x - 1, y)) {
             add(quads, (0, 3, 7, 4));
         }
 
@@ -190,7 +186,7 @@ fn draw_spire(quads: &mut Vec<Quad>, spire: &Spire, heightmap: &Heightmap<f32>) 
         }
 
         // Y2
-        if !spire.points.contains(&(x + 1, y )) {
+        if !spire.points.contains(&(x + 1, y)) {
             add(quads, (2, 1, 5, 6));
         }
     }
@@ -226,13 +222,23 @@ impl Hash for HashP {
 
 pub fn of_heightmap(heightmap: &Heightmap<f32>) -> Model {
     info!(
-        "Meshifying heightmap of size {} {} {:?}",
-        heightmap.width, heightmap.height, heightmap.data
+        "Meshifying heightmap of size {} {}",
+        heightmap.width, heightmap.height
     );
+
+    let mut heightmap  : Heightmap<f32> = heightmap.clone();
+
+    for point in &mut heightmap.data  {
+        *point = (*point * 512.).round() / 512.;
+    }
+
+    let heightmap = &heightmap;
+
+    info!("Rounded heightmap");
 
     // TODO: If we discover the spires on-line while drawing the quads we will use less memory.
     let spires = discover_spires(heightmap);
-    info!("Discovered spires {:?}", spires);
+    info!("Discovered spires {}", spires.len());
 
     let mut quads: Vec<Quad> = Vec::new();
     for spire in spires {

@@ -5,7 +5,7 @@ use remedian::RemedianBlock;
 use serde::{Deserialize, Serialize};
 use std::ops::{Index, IndexMut};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Heightmap<T: Clone + Copy> {
     pub data: Vec<T>,
     pub width: usize,
