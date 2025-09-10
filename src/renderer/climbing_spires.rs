@@ -2,13 +2,14 @@ use super::types::{Model, Point};
 use crate::heightmap::Heightmap;
 use log::{debug, info};
 use std::collections::{HashMap, HashSet};
+use fasthash::spooky::Hash64;
 use std::hash::{Hash, Hasher};
 
 pub type Quad = [Point; 4];
 
 #[derive(Debug)]
 struct Spire {
-    points: HashSet<(usize, usize)>,
+    points: HashSet<(usize, usize), Hash64>,
     start_z: f32,
     end_z: f32,
     base: bool,
@@ -41,7 +42,7 @@ fn ascend_spire(previous_spire: &Spire, heightmap: &Heightmap<f32>) -> Vec<Spire
         previous_spire.points.len()
     );
 
-    let mut handled_points = HashSet::new();
+    let mut handled_points = HashSet::with_hasher(Hash64);
     let mut result_spires = Vec::new();
 
     let continues =
@@ -49,8 +50,9 @@ fn ascend_spire(previous_spire: &Spire, heightmap: &Heightmap<f32>) -> Vec<Spire
 
     for &off in previous_spire.points.iter() {
         if continues(off) && !handled_points.contains(&off) {
+            let points: HashSet<(usize, usize), Hash64> = HashSet::with_hasher(Hash64);
             let mut new_spire = Spire {
-                points: HashSet::new(),
+                points: points,
                 start_z: previous_spire.end_z,
                 end_z: heightmap[off],
                 base: false,
@@ -89,7 +91,7 @@ fn ascend_spire(previous_spire: &Spire, heightmap: &Heightmap<f32>) -> Vec<Spire
 fn base_spires(heightmap: &Heightmap<f32>) -> Vec<Spire> {
     // We find the root spires by creating a fake negative spire and then seeing where it joins the
     // real positive shape.
-    let mut all_points = HashSet::new();
+    let mut all_points = HashSet::with_hasher(Hash64);
     for y in 0..heightmap.height {
         for x in 0..heightmap.width {
             all_points.insert((x, y));
@@ -249,7 +251,7 @@ pub fn of_heightmap(heightmap: &Heightmap<f32>) -> Model {
 
     info!("Producing triangles");
 
-    let mut triangle_indices = HashMap::new();
+    let mut triangle_indices = HashMap::with_hasher(Hash64);
 
     let mut vertices = Vec::new();
     let mut triangles = Vec::new();
