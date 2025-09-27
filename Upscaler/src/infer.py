@@ -44,8 +44,7 @@ def aa(tensor):
 def display_reverse(images: List, to_file=None):
     fig, axes = plt.subplots(1, len(images), figsize=(10, 1))
     for i, ax in enumerate(axes.flat):
-        x = images[i].squeeze(0)
-        x = rearrange(x, "c h w -> h w c")
+        x = images[i]
         x = x.numpy()
         ax.imshow(x, vmin=0, vmax=1)
         ax.axis("off")
@@ -338,7 +337,7 @@ def tiled_inference(src_frame, src_mask, src_keep, autoencoder, kernel_size, dev
                     write_back_start_x:write_back_end_x,
                 ] = zeros(reconstructed_frame.shape, dtype=torch.bool)
 
-                #display_reverse(
+                # display_reverse(
                 #    [
                 #        tile_data.to("cpu"),
                 #        tile_mask.to("cpu"),
@@ -348,7 +347,7 @@ def tiled_inference(src_frame, src_mask, src_keep, autoencoder, kernel_size, dev
                 #        src_frame.to("cpu"),
                 #        src_mask.to("cpu"),
                 #    ]
-                #)
+                # )
             else:
                 print("Skipping tile", start_x, start_y)
 

@@ -19,6 +19,7 @@ from torch import (
     sqrt,
     transpose,
     randperm,
+    ones_like,
 )
 from torch.distributions import Normal
 from torch.distributions.kl import kl_divergence
@@ -134,29 +135,43 @@ def train_auto(
             tqdm(train_loader, desc=f"Epoch {i + 1}/{num_epochs}")
         ):
             optimizer.zero_grad(set_to_none=True)
-            for_train = datapoint["without_nan"].to(device, non_blocking=True)
+            for_train = (
+                datapoint["terrain_with_classification"]
+                .to(device, non_blocking=True)
+                .squeeze(1)
+            )
             mask = datapoint["mask"].to(device, non_blocking=True)
+
+            print(for_train.shape, mask.shape)
 
             # Randomly choose to transpose the X,Y (We could during data generation rotate the entire tile before translating it to a heightmap, but that is trickier)
             if random.choice([True, False]):
                 for_train = transpose(for_train, -1, -2)
                 mask = transpose(mask, -1, -2)
 
+            print(for_train.shape, mask.shape)
+
             # Take a random element from the batch and combine its missing data with our own so that we incorporate some real loooking missing data into our own input
             batch_noise = apply_batch_noise(mask, count=random.randint(1, 2))
 
+            print(for_train.shape, mask.shape)
+
             # Generate a bunch of random numbers (batch_size,) between 0 and 1 for a known noise addition
             # Add some more noise to the image so the decoder can see some blank cells
-            min_noise = 0.01
-            max_noise = 0.35
-            noise_thresh_per_batch_elt = (
-                min_noise + (rand((batch_size, 1, 1, 1)) * (max_noise - min_noise))
-            ).to(device)
-            additional_noise = rand_like(for_train) > noise_thresh_per_batch_elt
+
+            if random.choice([True, False, False]):
+                min_noise = 0.01
+                max_noise = 0.35
+                noise_thresh_per_batch_elt = (
+                    min_noise + (rand((batch_size, 1, 1, 1)) * (max_noise - min_noise))
+                ).to(device)
+                additional_noise = rand_like(for_train) > noise_thresh_per_batch_elt
+            else:
+                additional_noise = ones_like(for_train)
 
             total_mask = logical_and(batch_noise, additional_noise)
 
-            for_autoencoder = (for_train * total_mask) + (-1 * logical_not(total_mask))
+            for_autoencoder = for_train * total_mask
 
             encoded = autoencoder.encode(for_autoencoder)
             sample = encoded.sample()
@@ -178,7 +193,7 @@ def train_auto(
             total_kl_loss += kl_divergence_loss.item()
             total_output_loss += output_loss.item()
 
-            if (bidx % int(dataset_per_epoch // 100)) == 0:
+            if (bidx % int(dataset_per_epoch // 10)) == 0:
                 print(
                     "Sample",
                     bidx,
@@ -192,22 +207,22 @@ def train_auto(
                 checkpoint()
 
                 for elt in range(0, for_train.shape[0]):
-                    dec_for_train = for_train.to("cpu")[elt].unsqueeze(0).detach()
-                    dec_for_autoencoder = (
-                        for_autoencoder.to("cpu")[elt].unsqueeze(0).detach()
-                    )
-                    dec_decoded = decoded.to("cpu")[elt].unsqueeze(0).detach()
-                    dec_mask = mask.to("cpu")[elt].unsqueeze(0).detach()
-                    dec_reconstructed = (
-                        reconstructed.to("cpu")[elt].unsqueeze(0).detach()
-                    )
+                    dec_for_train = for_train.to("cpu")[elt][0].detach()
+                    dec_clas_train = for_train.to("cpu")[elt][1].detach()
+                    dec_for_autoencoder = for_autoencoder.to("cpu")[elt][0].detach()
+                    dec_decoded = decoded.to("cpu")[elt][0].detach()
+                    dec_mask = mask.to("cpu")[elt][0].detach()
+                    dec_reconstructed = reconstructed.to("cpu")[elt][0].detach()
+                    dec_clas_reconstructed = reconstructed.to("cpu")[elt][1].detach()
                     display_reverse(
                         [
                             dec_for_train,
+                            dec_clas_train,
                             dec_mask,
                             dec_for_autoencoder,
                             dec_decoded,
                             dec_reconstructed,
+                            dec_clas_reconstructed,
                         ],
                         to_file=elt,
                     )

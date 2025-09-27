@@ -42,22 +42,26 @@ def load(path):
     with open(path, "rb") as file:
         sample = pickle.load(file)
 
-    width = sample["width"]
-    height = sample["height"]
+    heightmap = sample["heightmap"]
 
-    with_nan = tensor([x if x != None else nan for x in sample["data"]]).reshape(
+    width = heightmap["width"]
+    height = heightmap["height"]
+
+    with_nan = tensor([x if x != None else nan for x in heightmap["data"]]).reshape(
         (height, width)
     )
 
     nans = isnan(with_nan)
-    mask = logical_not(nans)
 
     without_nan = nan_to_num(with_nan, nan=0.0)
+    classification = tensor(sample["classification"]["data"]).reshape((height, width))
+    mask = classification != 0  # 0 is unknown, 1 is ground, 2 is buildings
 
-    sample["without_nan"] = without_nan
-    sample["mask"] = mask
+    heightmap["mask"] = mask
+    heightmap["without_nan"] = without_nan
+    heightmap["classification"] = classification
 
-    return sample
+    return heightmap
 
 
 # Dataset for candidate selection, used to preprocess actual samples out of larger files by preprocess_samples
@@ -75,8 +79,8 @@ class TerrainDatasetSlow(Dataset):
                 with open(path, "rb") as file:
                     data = pickle.load(file)
 
-                width = data["width"]
-                height = data["height"]
+                width = data["heightmap"]["width"]
+                height = data["heightmap"]["height"]
 
                 samples = ceil((width / self.sample_x) * (height / self.sample_y))
 
@@ -85,7 +89,7 @@ class TerrainDatasetSlow(Dataset):
                     for _i in range(samples):
                         final_files.append(path)
             except Exception as e:
-                print("path failed to load", path)
+                print("path failed to load", path, e)
 
         self.files = final_files
         self.broken = set()
@@ -104,9 +108,17 @@ class TerrainDatasetSlow(Dataset):
         end_y = start_y + self.sample_y
 
         without_nan = sample["without_nan"][start_y:end_y, start_x:end_x]
+        classification = sample["classification"][start_y:end_y, start_x:end_x]
         mask = sample["mask"][start_y:end_y, start_x:end_x]
 
-        return without_nan, mask
+        print(without_nan.shape)
+
+        # Combine the classification and without nan into two channels in a single tensor
+        terrain_with_classification = cat(
+            [without_nan.unsqueeze(0), classification.unsqueeze(0)], dim=0
+        )
+
+        return terrain_with_classification, mask
 
     def reject_candidate(self, mask):
         mask = mask.flatten()
@@ -118,7 +130,7 @@ class TerrainDatasetSlow(Dataset):
         # Make this deterministic for a given self.files by seeding rand per iteration with the idx
         rand = Random(idx)
         sample = load(self.files[idx])
-        without_nan = tensor([])
+        terrain_with_classification = tensor([])
         mask = tensor([])
         attempts = 0
 
@@ -126,7 +138,7 @@ class TerrainDatasetSlow(Dataset):
         broken = self.files[idx] in self.broken
 
         while not broken:
-            without_nan, mask = self.candidate(rand, sample)
+            terrain_with_classification, mask = self.candidate(rand, sample)
             if not self.reject_candidate(mask):
                 break
             attempts += 1
@@ -135,7 +147,7 @@ class TerrainDatasetSlow(Dataset):
                 self.broken.add(self.files[idx])
 
         return {
-            "without_nan": without_nan,
+            "terrain_with_classification": terrain_with_classification,
             "mask": mask,
             "broken": broken,
         }

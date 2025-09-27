@@ -1,10 +1,13 @@
 use clap::Parser;
 use log::{error, info, warn};
+use rust_las_printer::classification::ClassificationType;
 use rust_las_printer::heightmap::{Heightmap, InterpolationMode, StreamingHeightmap};
 use rust_las_printer::las_data::{load_from_directory, Limits};
+use rust_las_printer::las_keep_filter::LasKeepFilter;
 use rust_las_printer::renderer::to_3d_model;
 use rust_las_printer::to_obj::to_obj;
 use rust_las_printer::to_stl::to_stl;
+use serde::{Deserialize, Serialize};
 use serde_pickle::{DeOptions, SerOptions};
 use std::fs::{read, File};
 use threecrate_io::{obj::ObjWriter, MeshWriter};
@@ -31,6 +34,9 @@ struct GenerateHeightmap {
 
     #[arg(long, default_value_t = 16)]
     max_threads: usize,
+
+    #[arg(long, default_value_t = false)]
+    assume_unclassified_are_buildings: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -69,14 +75,14 @@ enum Args {
 fn construct_heightmap(
     limits: &Limits,
     args: &GenerateHeightmap,
-    las_type: &LasType,
+    filter: &LasKeepFilter,
 ) -> Heightmap<Option<f32>> {
     let mut streamed = StreamingHeightmap::new(&limits, args.pixels_per_unit_dim);
 
     load_from_directory(
         &args.las_folder_path,
         args.max_threads,
-        las_type,
+        filter,
         |x, y, z| {
             streamed.add((x, y, z));
         },
@@ -86,12 +92,18 @@ fn construct_heightmap(
 }
 
 fn build_terrain_map(limits: &Limits, args: &GenerateHeightmap) -> Heightmap<Option<f32>> {
-    let grid_zones = construct_heightmap(&limits, &args, &LasType::GroundAndWater);
+    let grid_zones = construct_heightmap(&limits, &args, &LasKeepFilter::ground_layer());
     grid_zones
 }
 
 fn build_building_map(limits: &Limits, args: &GenerateHeightmap) -> Heightmap<Option<f32>> {
-    let grid_zones = construct_heightmap(&limits, &args, &LasType::Buildings);
+    let filter = LasKeepFilter::building_layer();
+    let filter = if args.assume_unclassified_are_buildings {
+        filter.add_unclassified()
+    } else {
+        filter
+    };
+    let grid_zones = construct_heightmap(&limits, &args, &filter);
     grid_zones
 }
 
@@ -104,6 +116,30 @@ fn merge(terrain: &mut Heightmap<Option<f32>>, building: &Heightmap<Option<f32>>
             }
         }
     }
+}
+
+fn build_classification_layer(
+    terrain: &Heightmap<Option<f32>>,
+    building: &Heightmap<Option<f32>>,
+) -> Heightmap<ClassificationType> {
+    Heightmap {
+        data: (0..terrain.data.len())
+            .map(|i| match (terrain.data[i], building.data[i]) {
+                (_, Some(_)) => ClassificationType::BuildingsLayer,
+                (Some(_), _) => ClassificationType::GroundLayer,
+                (None, None) => ClassificationType::Unknown,
+            })
+            .collect(),
+        width: terrain.width,
+        height: terrain.height,
+        scale_z: 1.,
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct HeightmapAndClassification {
+    heightmap: Heightmap<Option<f32>>,
+    classification: Heightmap<ClassificationType>,
 }
 
 fn generate_heightmap(args: GenerateHeightmap) {
@@ -122,6 +158,8 @@ fn generate_heightmap(args: GenerateHeightmap) {
     // median since you get less noisy data but don't end up with weird looking underpasses.
     let mut grid_zones = build_terrain_map(&limits, &args);
     let buildings = build_building_map(&limits, &args);
+
+    let classification = build_classification_layer(&grid_zones, &buildings);
     merge(&mut grid_zones, &buildings);
 
     info!("Flipping the Y axis");
@@ -143,7 +181,15 @@ fn generate_heightmap(args: GenerateHeightmap) {
 
         info!("Normalizing min={} max={}", min_z, max_z);
         let grid_zones = grid_zones.normalize_z_by(min_z, max_z);
-        serde_pickle::to_writer(&mut file, &grid_zones, SerOptions::new()).unwrap();
+        serde_pickle::to_writer(
+            &mut file,
+            &HeightmapAndClassification {
+                heightmap: grid_zones,
+                classification,
+            },
+            SerOptions::new(),
+        )
+        .unwrap();
     }
 }
 

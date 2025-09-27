@@ -30,8 +30,11 @@ def main():
     dset_len = len(dataset)
 
     for i, element in tqdm(enumerate(dataset), desc=f"Total Length {dset_len}"):
+        path = f"{to_}/{i}.pt"
+        print("considering", path)
         if not element["broken"]:
-            torch.save(element, f"{to_}/{i}.pt")
+            print("writing", path)
+            torch.save(element, path)
 
 
 if __name__ == "__main__":

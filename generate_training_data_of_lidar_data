@@ -7,6 +7,6 @@ IFS=$'\n'
 for file in `find "$1"  -type f -name "*.la*"`; do
   to_name="$2/${count}.pre.pt"
   echo "Processing $file to $to_name"
-  RUST_LOG=info cargo run --release --bin converter -- --las-folder-path "$file" --output-path "$to_name" --pixels-per-unit-dim "$3" --write-to upscale --max-threads 8
+  RUST_LOG=info cargo run --release --bin converter -- generate-heightmap --las-folder-path "$file" --output-path "$to_name" --pixels-per-unit-dim "$3" --max-threads 1
   count=$((count+1))
 done

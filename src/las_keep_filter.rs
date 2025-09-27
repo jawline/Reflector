@@ -1,11 +1,6 @@
 use las::point::Classification;
-use las::{Header, Read, Reader};
-use log::info;
 use std::collections::HashSet;
-use std::ffi::OsStr;
-use std::sync::mpsc::sync_channel;
-use threadpool::ThreadPool;
-use walkdir::WalkDir;
+use Classification::*;
 
 #[derive(Debug, Clone)]
 pub struct LasKeepFilter {
@@ -19,21 +14,19 @@ impl LasKeepFilter {
         }
     }
 
-    pub fn default(include_unclassified: bool) -> Self {
-        use Classification::*;
-        if include_unclassified {
-            Self::new(&[
-                Ground,
-                Building,
-                RoadSurface,
-                BridgeDeck,
-                Rail,
-                Water,
-                Unclassified,
-            ])
-        } else {
-            Self::new(&[Ground, Building, RoadSurface, BridgeDeck, Rail, Water])
-        }
+    pub fn add_unclassified(self) -> Self {
+        let mut mapping = self.mapping;
+        mapping.insert(Unclassified.into());
+        mapping.insert(CreatedNeverClassified.into());
+        Self { mapping }
+    }
+
+    pub fn ground_layer() -> Self {
+        Self::new(&[Ground, Water])
+    }
+
+    pub fn building_layer() -> Self {
+        Self::new(&[Building, RoadSurface, BridgeDeck, Rail])
     }
 
     pub fn all() -> Self {

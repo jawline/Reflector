@@ -1,8 +1,6 @@
 use crate::las_keep_filter::LasKeepFilter;
-use las::point::Classification;
 use las::{Header, Read, Reader};
 use log::info;
-use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::sync::mpsc::sync_channel;
 use threadpool::ThreadPool;

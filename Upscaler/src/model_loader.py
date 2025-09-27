@@ -15,7 +15,7 @@ def create_autoencoder(device, lr):
     emb_channels = 4
 
     encoder = Encoder(
-        in_channels=1,
+        in_channels=2,
         z_channels=z_channels,
         channels=32,
         channel_multipliers=[4, 2, 2],
@@ -23,7 +23,7 @@ def create_autoencoder(device, lr):
     ).to(device)
 
     decoder = Decoder(
-        out_channels=1,
+        out_channels=2,
         z_channels=z_channels,
         channels=32,
         channel_multipliers=[4, 2, 2],

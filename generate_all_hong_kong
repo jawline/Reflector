@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-
-./generate_training_data_of_lidar_data "/media/blake/Bigger Drive/LiDAR Data/Hong Kong Data" "/media/blake/Bigger Drive/preprocessed-data-max-rather-than-ckms-no-unclassified/HK/sp75" 0.75
-./generate_training_data_of_lidar_data "/media/blake/Bigger Drive/LiDAR Data/Hong Kong Data" "/media/blake/Bigger Drive/preprocessed-data-max-rather-than-ckms-no-unclassified/HK/1sp" 1.0
-./generate_training_data_of_lidar_data "/media/blake/Bigger Drive/LiDAR Data/Hong Kong Data" "/media/blake/Bigger Drive/preprocessed-data-max-rather-than-ckms-no-unclassified/HK/1sp25" 1.25
-./generate_training_data_of_lidar_data "/media/blake/Bigger Drive/LiDAR Data/Hong Kong Data" "/media/blake/Bigger Drive/preprocessed-data-max-rather-than-ckms-no-unclassified/HK/1sp4" 1.4
-./generate_training_data_of_lidar_data "/media/blake/Bigger Drive/LiDAR Data/Hong Kong Data" "/media/blake/Bigger Drive/preprocessed-data-max-rather-than-ckms-no-unclassified/HK/1sp5" 1.5
-./generate_training_data_of_lidar_data "/media/blake/Bigger Drive/LiDAR Data/Hong Kong Data" "/media/blake/Bigger Drive/preprocessed-data-max-rather-than-ckms-no-unclassified/HK/1sp75" 1.75
-./generate_training_data_of_lidar_data "/media/blake/Bigger Drive/LiDAR Data/Hong Kong Data" "/media/blake/Bigger Drive/preprocessed-data-max-rather-than-ckms-no-unclassified/HK/1sp9" 1.9
-./generate_training_data_of_lidar_data "/media/blake/Bigger Drive/LiDAR Data/Hong Kong Data" "/media/blake/Bigger Drive/preprocessed-data-max-rather-than-ckms-no-unclassified/HK/2sp" 2.
+./generate_training_data_of_lidar_data "$1" "$2/sp5" 0.5
+./generate_training_data_of_lidar_data "$1" "$2/sp6" 0.5
+./generate_training_data_of_lidar_data "$1" "$2/sp75" 0.75
+./generate_training_data_of_lidar_data "$1" "$2/1sp" 1.0
+./generate_training_data_of_lidar_data "$1" "$2/1sp25" 1.25
+./generate_training_data_of_lidar_data "$1" "$2/1sp4" 1.4
+./generate_training_data_of_lidar_data "$1" "$2/1sp5" 1.5
+./generate_training_data_of_lidar_data "$1" "$2/1sp75" 1.75
+./generate_training_data_of_lidar_data "$1" "$2/1sp9" 1.9
+./generate_training_data_of_lidar_data "$1" "$2/2sp" 2.
