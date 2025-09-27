@@ -1,8 +1,8 @@
 use super::types::{Model, Point};
 use crate::heightmap::Heightmap;
+use fasthash::spooky::Hash64;
 use log::{debug, info};
 use std::collections::{HashMap, HashSet};
-use fasthash::spooky::Hash64;
 use std::hash::{Hash, Hasher};
 
 pub type Quad = [Point; 4];
@@ -228,9 +228,9 @@ pub fn of_heightmap(heightmap: &Heightmap<f32>) -> Model {
         heightmap.width, heightmap.height
     );
 
-    let mut heightmap  : Heightmap<f32> = heightmap.clone();
+    let mut heightmap: Heightmap<f32> = heightmap.clone();
 
-    for point in &mut heightmap.data  {
+    for point in &mut heightmap.data {
         *point = (*point * 512.).round() / 512.;
     }
 

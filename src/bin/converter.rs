@@ -1,7 +1,7 @@
 use clap::Parser;
 use log::{error, info, warn};
 use rust_las_printer::heightmap::{Heightmap, InterpolationMode, StreamingHeightmap};
-use rust_las_printer::las_data::{load_from_directory, LasType, Limits};
+use rust_las_printer::las_data::{load_from_directory, Limits};
 use rust_las_printer::renderer::to_3d_model;
 use rust_las_printer::to_obj::to_obj;
 use rust_las_printer::to_stl::to_stl;
