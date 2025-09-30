@@ -15,10 +15,11 @@ use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use clap::Parser;
 use env_logger;
 use log::info;
-use rust_las_printer::{heightmap::Heightmap, renderer::to_3d_model};
 use serde_pickle::DeOptions;
 use std::f32::consts::PI;
 use std::fs::read;
+
+use rust_las_printer::{las_converter::heightmap::Heightmap, renderer::to_3d_model};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

@@ -1,16 +1,21 @@
 use clap::Parser;
 use log::{error, info, warn};
-use rust_las_printer::classification::ClassificationType;
-use rust_las_printer::heightmap::{Heightmap, InterpolationMode, StreamingHeightmap};
-use rust_las_printer::las_data::{load_from_directory, Limits};
-use rust_las_printer::las_keep_filter::LasKeepFilter;
-use rust_las_printer::renderer::to_3d_model;
-use rust_las_printer::to_obj::to_obj;
-use rust_las_printer::to_stl::to_stl;
 use serde::{Deserialize, Serialize};
 use serde_pickle::{DeOptions, SerOptions};
 use std::fs::{read, File};
 use threecrate_io::{obj::ObjWriter, MeshWriter};
+
+use rust_las_printer::{
+    las_converter::{
+        classification::ClassificationType,
+        heightmap::{Heightmap, InterpolationMode, StreamingHeightmap},
+        las_data::{load_from_directory, Limits},
+        las_keep_filter::LasKeepFilter,
+    },
+    renderer::to_3d_model,
+    to_obj::to_obj,
+    to_stl::to_stl,
+};
 
 #[derive(PartialEq, Parser, Eq, Debug, Clone)]
 enum Format {

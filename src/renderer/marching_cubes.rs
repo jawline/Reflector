@@ -1,5 +1,5 @@
 use super::types::Model;
-use crate::heightmap::Heightmap;
+use crate::las_converter::heightmap::Heightmap;
 use lin_alg::f32::Vec3;
 use log::info;
 use mcubes::{MarchingCubes, MeshSide};

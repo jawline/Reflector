@@ -1,9 +1,5 @@
-use super::bag_of_cubes;
-use super::climbing_spires;
-use super::marching_cubes;
-use super::terrain;
-use super::types::Model;
-use crate::heightmap::Heightmap;
+use super::{bag_of_cubes, climbing_spires, marching_cubes, terrain, types::Model};
+use crate::las_converter::heightmap::Heightmap;
 use clap::{Parser, ValueEnum};
 
 #[derive(PartialEq, Parser, Eq, Debug, Clone, Copy, ValueEnum, Default)]

@@ -1,5 +1,5 @@
 use super::types::{Model, Point, Triangle};
-use crate::heightmap::Heightmap;
+use crate::las_converter::heightmap::Heightmap;
 use log::info;
 
 /// Add a border along the y axis at a fixed x (x should either be 0 or heightmap.height - 1)

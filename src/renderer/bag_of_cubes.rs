@@ -1,8 +1,9 @@
 use super::types::{Model, Point};
-use crate::heightmap::Heightmap;
 use log::info;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
+
+use crate::las_converter::heightmap::Heightmap;
 
 pub type Quad = [Point; 4];
 

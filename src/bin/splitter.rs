@@ -1,6 +1,8 @@
 use clap::Parser;
 use log::info;
-use rust_las_printer::las_data::{find_a_header, load_from_directory_points, Limits};
+use rust_las_printer::las_converter::las_data::{
+    find_a_header, load_from_directory_points, Limits,
+};
 use std::cmp::min;
 
 use las::{Write, Writer};
