@@ -88,7 +88,7 @@ fn construct_heightmap(
         },
     );
 
-    streamed.finalize().flip_y()
+    streamed.finalize()
 }
 
 fn build_terrain_map(limits: &Limits, args: &GenerateHeightmap) -> Heightmap<Option<f32>> {
@@ -161,9 +161,6 @@ fn generate_heightmap(args: GenerateHeightmap) {
 
     let classification = build_classification_layer(&grid_zones, &buildings);
     merge(&mut grid_zones, &buildings);
-
-    info!("Flipping the Y axis");
-    let grid_zones = grid_zones.flip_y();
 
     let proportion_of_empty_cells = grid_zones.proportion_of_empty_cells();
     info!("Proportion of empty cells: {}", proportion_of_empty_cells);

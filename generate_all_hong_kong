@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ./generate_training_data_of_lidar_data "$1" "$2/sp5" 0.5
-./generate_training_data_of_lidar_data "$1" "$2/sp6" 0.5
+./generate_training_data_of_lidar_data "$1" "$2/sp6" 0.6
 ./generate_training_data_of_lidar_data "$1" "$2/sp75" 0.75
 ./generate_training_data_of_lidar_data "$1" "$2/1sp" 1.0
 ./generate_training_data_of_lidar_data "$1" "$2/1sp25" 1.25

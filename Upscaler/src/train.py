@@ -32,7 +32,6 @@ from unet import UNET
 from tqdm import tqdm
 from constants import num_time_steps
 from infer import display_reverse
-from preprocess import unnorm
 
 
 def set_seed(seed: int = 42):
@@ -140,7 +139,7 @@ def train_auto(
                 .to(device, non_blocking=True)
                 .squeeze(1)
             )
-            mask = datapoint["mask"].to(device, non_blocking=True)
+            mask = datapoint["mask"].to(device, non_blocking=True).squeeze(1)
 
             print(for_train.shape, mask.shape)
 
@@ -149,16 +148,15 @@ def train_auto(
                 for_train = transpose(for_train, -1, -2)
                 mask = transpose(mask, -1, -2)
 
-            print(for_train.shape, mask.shape)
+            # print(for_train.shape, mask.shape)
 
             # Take a random element from the batch and combine its missing data with our own so that we incorporate some real loooking missing data into our own input
             batch_noise = apply_batch_noise(mask, count=random.randint(1, 2))
 
-            print(for_train.shape, mask.shape)
+            # print(for_train.shape, mask.shape)
 
             # Generate a bunch of random numbers (batch_size,) between 0 and 1 for a known noise addition
             # Add some more noise to the image so the decoder can see some blank cells
-
             if random.choice([True, False, False]):
                 min_noise = 0.01
                 max_noise = 0.35
@@ -193,7 +191,7 @@ def train_auto(
             total_kl_loss += kl_divergence_loss.item()
             total_output_loss += output_loss.item()
 
-            if (bidx % int(dataset_per_epoch // 10)) == 0:
+            if (bidx % int(dataset_per_epoch // 100)) == 0:
                 print(
                     "Sample",
                     bidx,

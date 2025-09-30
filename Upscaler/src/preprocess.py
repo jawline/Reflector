@@ -1,12 +1,12 @@
 import pickle
-from torch import tensor, logical_not, masked_select, cat, isnan, nan_to_num
+import functools
+from torch import tensor, logical_not, masked_select, cat, isnan, nan_to_num, flip
 from torch.utils.data import Dataset
 from glob import glob
 from math import floor, ceil
 from random import Random
 from tqdm import tqdm
 from constants import tile_size
-from functools import lru_cache
 from math import nan
 
 max_attempts = 50
@@ -37,29 +37,40 @@ def unnorm(image, min_values, max_values):
 
 
 # LRU cache the result so indexing into the same file is cheaper
-@lru_cache(maxsize=16)
+@functools.lru_cache(maxsize=64)
 def load(path):
     with open(path, "rb") as file:
+        print("Loading", path)
         sample = pickle.load(file)
 
     heightmap = sample["heightmap"]
+    classification = sample["classification"]
 
     width = heightmap["width"]
     height = heightmap["height"]
 
+    assert (classification["width"] == width)
+    assert (classification["height"] == height)
+
     with_nan = tensor([x if x != None else nan for x in heightmap["data"]]).reshape(
         (height, width)
     )
-
     nans = isnan(with_nan)
-
     without_nan = nan_to_num(with_nan, nan=0.0)
-    classification = tensor(sample["classification"]["data"]).reshape((height, width))
+    classification = tensor([x for x in classification["data"]] ).reshape(with_nan.shape)
+    # TODO: Remove this, it was a bug in rust
+    print("TODO: Remove classification flip the next time we regenerate data")
+    classification = flip(classification, dims=[-2])
+
     mask = classification != 0  # 0 is unknown, 1 is ground, 2 is buildings
+
+    #print("WH", width, height, sample["classification"]["width"], sample["classification"]["height"])
 
     heightmap["mask"] = mask
     heightmap["without_nan"] = without_nan
     heightmap["classification"] = classification
+
+    #display_reverse([with_nan, without_nan, classification])
 
     return heightmap
 
@@ -82,9 +93,15 @@ class TerrainDatasetSlow(Dataset):
                 width = data["heightmap"]["width"]
                 height = data["heightmap"]["height"]
 
-                samples = ceil((width / self.sample_x) * (height / self.sample_y))
-
                 if width > self.sample_x and height > self.sample_y:
+                    # This is somewhat arbitrary, given width, height we could
+                    # generate (width * height) unique samples.  Instead, our
+                    # strategy will be to pick (width / sample_width) * (height
+                    # / sample_height) * 4 samples randomly. These regions
+                    # might overlap, or might end up in other portions of the
+                    # image. We aren't particularly sad about (unlikely)
+                    # duplicates.
+                    samples = ceil((width / self.sample_x) * (height / self.sample_y)) * 4
                     # Insert the same file in samples times to generate samples random samples
                     for _i in range(samples):
                         final_files.append(path)
@@ -111,12 +128,17 @@ class TerrainDatasetSlow(Dataset):
         classification = sample["classification"][start_y:end_y, start_x:end_x]
         mask = sample["mask"][start_y:end_y, start_x:end_x]
 
-        print(without_nan.shape)
+
+        #print("Input shapes", sample["mask"].shape, without_nan.shape, classification.shape)
 
         # Combine the classification and without nan into two channels in a single tensor
         terrain_with_classification = cat(
             [without_nan.unsqueeze(0), classification.unsqueeze(0)], dim=0
         )
+
+        mask = mask.unsqueeze(0)
+        
+        #print("Final shapes", terrain_with_classification.shape, mask.shape)
 
         return terrain_with_classification, mask
 
