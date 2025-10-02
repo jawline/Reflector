@@ -19,7 +19,7 @@ def create_autoencoder(device, lr):
         z_channels=z_channels,
         channels=32,
         channel_multipliers=[4, 2, 2],
-        n_resnet_blocks=1,
+        n_resnet_blocks=3,
     ).to(device)
 
     decoder = Decoder(
@@ -27,7 +27,7 @@ def create_autoencoder(device, lr):
         z_channels=z_channels,
         channels=32,
         channel_multipliers=[4, 2, 2],
-        n_resnet_blocks=1,
+        n_resnet_blocks=3,
     ).to(device)
 
     optimizer = Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=lr)
