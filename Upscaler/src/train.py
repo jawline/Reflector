@@ -141,7 +141,7 @@ def train_auto(
             )
             mask = datapoint["mask"].to(device, non_blocking=True).squeeze(1)
 
-            print(for_train.shape, mask.shape)
+            # print(for_train.shape, mask.shape)
 
             # Randomly choose to transpose the X,Y (We could during data generation rotate the entire tile before translating it to a heightmap, but that is trickier)
             if random.choice([True, False]):
@@ -177,7 +177,7 @@ def train_auto(
             reconstructed = (for_train * mask) + (logical_not(mask) * decoded)
 
             output_loss = criterion(decoded * mask, for_train * mask) / batch_size
-            kl_divergence_loss = kl_loss(encoded, sample, beta=0.0001)
+            kl_divergence_loss = kl_loss(encoded, sample, beta=0.001)
 
             loss = output_loss
             if kl_divergence_loss < output_loss:

@@ -221,6 +221,8 @@ def tiled_inference(src_frame, src_mask, src_keep, autoencoder, kernel_size, dev
     src_height = src_frame.shape[-2]
     src_width = src_frame.shape[-1]
 
+    print("Beginning tiled inference", src_frame.shape, src_mask.shape, src_keep.shape)
+
     for start_y in range(0, src_frame.shape[-2], kernel_size - min_tile_overlap):
         print("Start y", start_y)
         for start_x in range(0, src_frame.shape[-1], kernel_size - min_tile_overlap):
@@ -265,16 +267,16 @@ def tiled_inference(src_frame, src_mask, src_keep, autoencoder, kernel_size, dev
                 print("Inferring tile", start_x, start_y, tile_data.shape)
 
                 # TODO: The model has overfitted on seeing some noise so this is necessary to produce sane outputs. Remove the rand in training
-                additional_tile_mask = logical_and(
-                    tile_mask, rand_like(tile_data) > 0.1
-                )
-                additional_tile_data = (tile_data * additional_tile_mask) + (
-                    -1 * logical_not(additional_tile_mask)
-                )
+                #additional_tile_mask = logical_and(
+                #    tile_mask, rand_like(tile_data) > 0.1
+                #)
+                #additional_tile_data = (tile_data * additional_tile_mask) + (
+                #    -1 * logical_not(additional_tile_mask)
+                #)
 
                 inference = infer_frame(
                     device,
-                    additional_tile_data,
+                    tile_data,
                     tile_mask,
                     autoencoder,
                 )
@@ -311,11 +313,14 @@ def tiled_inference(src_frame, src_mask, src_keep, autoencoder, kernel_size, dev
                 )
                 print("Reconstructed shape", reconstructed_frame.shape)
 
+                write_back_height = write_back_end_y - write_back_start_y
+                write_back_width = write_back_end_x - write_back_start_x
+
                 reconstructed_frame = reconstructed_frame[
                     :,
                     :,
-                    : write_back_end_y - write_back_start_y,
-                    : write_back_end_x - write_back_start_x,
+                    : write_back_height,
+                    : write_back_width,
                 ]
 
                 src_frame[
@@ -324,18 +329,20 @@ def tiled_inference(src_frame, src_mask, src_keep, autoencoder, kernel_size, dev
                     write_back_start_y:write_back_end_y,
                     write_back_start_x:write_back_end_x,
                 ] = reconstructed_frame
+
                 src_mask[
                     :,
                     :,
                     write_back_start_y:write_back_end_y,
                     write_back_start_x:write_back_end_x,
-                ] = ones(reconstructed_frame.shape, dtype=torch.bool)
+                ] = ones((1, 1, write_back_height, write_back_width), dtype=torch.bool)
+
                 src_keep[
                     :,
                     :,
                     write_back_start_y:write_back_end_y,
                     write_back_start_x:write_back_end_x,
-                ] = zeros(reconstructed_frame.shape, dtype=torch.bool)
+                ] = zeros((1, 1, write_back_height, write_back_width), dtype=torch.bool)
 
                 # display_reverse(
                 #    [

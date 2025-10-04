@@ -1,7 +1,7 @@
 import sys
 import torch
 import pickle
-from torch import tensor
+from torch import tensor, cat
 from train import train, train_auto
 from dataset import TerrainDataset
 from infer import (
@@ -64,11 +64,14 @@ def main():
         print("Preparing")
 
         sample = preprocess.load(path)
-
         without_nan = sample["without_nan"].unsqueeze(0).unsqueeze(0)
+        classification = sample["classification"].unsqueeze(0).unsqueeze(0)
         mask = sample["mask"].unsqueeze(0).unsqueeze(0)
 
-        print(without_nan.shape, mask.shape)
+        # Merge the classification channel in
+        without_nan = cat([without_nan, classification], dim=1)
+
+        print("Prepared", without_nan.shape, mask.shape)
 
         # display_reverse([without_nan, mask])
 
