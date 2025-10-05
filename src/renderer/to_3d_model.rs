@@ -8,10 +8,12 @@ pub enum Mode {
     Terrain,
     BagOfCubes,
     MarchingCubesLow,
-    #[default]
     MarchingCubesMedium,
     MarchingCubesHigh,
-    ClimbingSpires,
+    ClimbingSpiresLow,
+    #[default]
+    ClimbingSpiresMedium,
+    ClimbingSpiresHigh,
 }
 
 pub fn of_heightmap(heightmap: &Heightmap<f32>, mode: &Mode) -> Model {
@@ -20,7 +22,9 @@ pub fn of_heightmap(heightmap: &Heightmap<f32>, mode: &Mode) -> Model {
         Mode::MarchingCubesLow => marching_cubes::of_heightmap(heightmap, 128),
         Mode::MarchingCubesMedium => marching_cubes::of_heightmap(heightmap, 256),
         Mode::MarchingCubesHigh => marching_cubes::of_heightmap(heightmap, 512),
-        Mode::ClimbingSpires => climbing_spires::of_heightmap(heightmap),
+        Mode::ClimbingSpiresLow => climbing_spires::of_heightmap(heightmap, 128),
+        Mode::ClimbingSpiresMedium => climbing_spires::of_heightmap(heightmap, 256),
+        Mode::ClimbingSpiresHigh => climbing_spires::of_heightmap(heightmap, 512),
         Mode::Terrain => terrain::of_heightmap(heightmap),
     }
 }

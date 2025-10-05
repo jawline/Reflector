@@ -5,5 +5,5 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 pub enum ClassificationType {
     Unknown = 0,
     GroundLayer = 1,
-    BuildingsLayer = 2,
+    BuildingsOrVegetationLayer = 2,
 }

@@ -58,9 +58,6 @@ def load(path):
     nans = isnan(with_nan)
     without_nan = nan_to_num(with_nan, nan=0.0)
     classification = tensor([x for x in classification["data"]]).reshape(with_nan.shape)
-    # TODO: Remove this, it was a bug in rust
-    print("TODO: Remove classification flip the next time we regenerate data")
-    classification = flip(classification, dims=[-2])
 
     mask = classification != 0  # 0 is unknown, 1 is ground, 2 is buildings
 

@@ -221,16 +221,18 @@ impl Hash for HashP {
     }
 }
 
-pub fn of_heightmap(heightmap: &Heightmap<f32>) -> Model {
+pub fn of_heightmap(heightmap: &Heightmap<f32>, max_num_unique_z_heights: usize) -> Model {
     info!(
         "Meshifying heightmap of size {} {}",
         heightmap.width, heightmap.height
     );
 
+    let max_num_unique_z_heights = max_num_unique_z_heights as f32;
+
     let mut heightmap: Heightmap<f32> = heightmap.clone();
 
     for point in &mut heightmap.data {
-        *point = (*point * 512.).round() / 512.;
+        *point = (*point * max_num_unique_z_heights).round() / max_num_unique_z_heights;
     }
 
     let heightmap = &heightmap;

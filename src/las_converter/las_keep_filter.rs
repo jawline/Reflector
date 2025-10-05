@@ -21,6 +21,14 @@ impl LasKeepFilter {
         Self { mapping }
     }
 
+    pub fn add_vegetation(self) -> Self {
+        let mut mapping = self.mapping;
+        mapping.insert(LowVegetation.into());
+        mapping.insert(MediumVegetation.into());
+        mapping.insert(HighVegetation.into());
+        Self { mapping }
+    }
+
     pub fn ground_layer() -> Self {
         Self::new(&[Ground, Water])
     }

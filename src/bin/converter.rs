@@ -41,7 +41,10 @@ struct GenerateHeightmap {
     max_threads: usize,
 
     #[arg(long, default_value_t = false)]
-    assume_unclassified_are_buildings: bool,
+    assume_unclassified_are_buildings_or_vegetation: bool,
+
+    #[arg(long, default_value_t = false)]
+    include_vegetation: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -103,11 +106,19 @@ fn build_terrain_map(limits: &Limits, args: &GenerateHeightmap) -> Heightmap<Opt
 
 fn build_building_map(limits: &Limits, args: &GenerateHeightmap) -> Heightmap<Option<f32>> {
     let filter = LasKeepFilter::building_layer();
-    let filter = if args.assume_unclassified_are_buildings {
+
+    let filter = if args.assume_unclassified_are_buildings_or_vegetation {
         filter.add_unclassified()
     } else {
         filter
     };
+
+    let filter = if args.include_vegetation {
+        filter.add_vegetation()
+    } else {
+        filter
+    };
+
     let grid_zones = construct_heightmap(&limits, &args, &filter);
     grid_zones
 }
@@ -130,7 +141,7 @@ fn build_classification_layer(
     Heightmap {
         data: (0..terrain.data.len())
             .map(|i| match (terrain.data[i], building.data[i]) {
-                (_, Some(_)) => ClassificationType::BuildingsLayer,
+                (_, Some(_)) => ClassificationType::BuildingsOrVegetationLayer,
                 (Some(_), _) => ClassificationType::GroundLayer,
                 (None, None) => ClassificationType::Unknown,
             })

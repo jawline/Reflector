@@ -44,14 +44,19 @@ def aa(tensor):
 def display_reverse(images: List, to_file=None):
     fig, axes = plt.subplots(1, len(images), figsize=(10, 1))
     for i, ax in enumerate(axes.flat):
+
         x = images[i]
+
+        while x.dim() > 2:
+            x = x.squeeze(0)
+
         x = x.numpy()
         ax.imshow(x, vmin=0, vmax=1)
         ax.axis("off")
 
     if to_file is not None:
         path = f"{to_file}.png"
-        plt.savefig(path, dpi=1200)
+        plt.savefig(path, dpi=350)
         plt.close()
         print("Rendered PNG", path)
     else:
@@ -267,17 +272,17 @@ def tiled_inference(src_frame, src_mask, src_keep, autoencoder, kernel_size, dev
                 print("Inferring tile", start_x, start_y, tile_data.shape)
 
                 # TODO: The model has overfitted on seeing some noise so this is necessary to produce sane outputs. Remove the rand in training
-                #additional_tile_mask = logical_and(
-                #    tile_mask, rand_like(tile_data) > 0.1
-                #)
-                #additional_tile_data = (tile_data * additional_tile_mask) + (
-                #    -1 * logical_not(additional_tile_mask)
-                #)
+                additional_tile_mask = logical_and(
+                    tile_mask, rand_like(tile_data) > 0.02
+                )
+                additional_tile_data = (tile_data * additional_tile_mask) + (
+                    -1 * logical_not(additional_tile_mask)
+                )
 
                 inference = infer_frame(
                     device,
-                    tile_data,
-                    tile_mask,
+                    additional_tile_data,
+                    additional_tile_mask,
                     autoencoder,
                 )
                 # display_reverse(
@@ -344,17 +349,19 @@ def tiled_inference(src_frame, src_mask, src_keep, autoencoder, kernel_size, dev
                     write_back_start_x:write_back_end_x,
                 ] = zeros((1, 1, write_back_height, write_back_width), dtype=torch.bool)
 
-                # display_reverse(
-                #    [
-                #        tile_data.to("cpu"),
-                #        tile_mask.to("cpu"),
-                #        inference.to("cpu"),
-                #        tile_keep.to("cpu"),
-                #        reconstructed_frame.to("cpu"),
-                #        src_frame.to("cpu"),
-                #        src_mask.to("cpu"),
-                #    ]
-                # )
+                display_reverse(
+                   [
+                       tile_data.to("cpu")[:,0:1,:,:],
+                       additional_tile_data.to("cpu")[:,0:1,:,:],
+                       tile_mask.to("cpu"),
+                       inference.to("cpu")[:,0:1,:,:],
+                       tile_keep.to("cpu"),
+                       reconstructed_frame.to("cpu")[:,0:1,:,:],
+                       src_frame.to("cpu")[:,0:1,:,:],
+                       src_mask.to("cpu"),
+                   ],
+                   to_file=f"{start_y}_{start_x}",
+                )
             else:
                 print("Skipping tile", start_x, start_y)
 
@@ -386,13 +393,14 @@ def whole_datasource_tiled_inference(
     # result = aa(result)
     # print("AA result", result.shape)
 
-    # display_reverse(
-    #    [
-    #        src_frame.to("cpu"),
-    #        src_mask.to("cpu"),
-    #        keep_mask.to("cpu"),
-    #        result.to("cpu"),
-    #    ]
-    # )
+    display_reverse(
+       [
+           src_frame.to("cpu")[:,0:1,:,:],
+           src_mask.to("cpu"),
+           keep_mask.to("cpu"),
+           result.to("cpu")[:,0:1,:,:],
+       ]
+       , to_file="./out"
+    )
 
     return result
