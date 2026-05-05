@@ -3,6 +3,7 @@ from torch.nn.functional import scaled_dot_product_attention
 from einops import rearrange
 from .embeddings import ContinuousEmbedding, DiscreteEmbedding
 
+
 class Attention(nn.Module):
     def __init__(self, C: int, num_heads: int, dropout_prob: float):
         super().__init__()
@@ -28,6 +29,7 @@ class Attention(nn.Module):
 
         return rearrange(x, "b h w C -> b C h w")
 
+
 class ResBlock(nn.Module):
     def __init__(self, C: int, num_groups: int, dropout_prob: float):
         super().__init__()
@@ -39,7 +41,7 @@ class ResBlock(nn.Module):
         self.dropout = nn.Dropout(p=dropout_prob, inplace=True)
 
     def forward(self, x):
-        x = x # + embeddings[:, : x.shape[0], :, :]
+        x = x  # + embeddings[:, : x.shape[0], :, :]
         r = self.conv1(self.relu(self.gnorm1(x)))
         r = self.dropout(r)
         r = self.conv2(self.relu(self.gnorm2(r)))
@@ -57,7 +59,7 @@ class AddCoords(nn.Module):
         yy_channel = yy_range.view(1, 1, height, 1).expand(1, 1, height, width)
 
         grid = cat([xx_channel, yy_channel], dim=1)
-        self.register_buffer('grid', grid)
+        self.register_buffer("grid", grid)
 
     def forward(self, x):
         batch_size = x.size(0)
@@ -68,9 +70,9 @@ class PartialConv2d(nn.Conv2d):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.mask_conv = nn.Conv2d(1, 1,
-                                   self.kernel_size, self.stride, self.padding,
-                                   self.dilation, bias=False)
+        self.mask_conv = nn.Conv2d(
+            1, 1, self.kernel_size, self.stride, self.padding, self.dilation, bias=False
+        )
 
         nn.init.constant_(self.mask_conv.weight, 1.0)
 
@@ -85,15 +87,15 @@ class PartialConv2d(nn.Conv2d):
         with no_grad():
             # 2. Count valid pixels in the window
             mask_count = self.mask_conv(mask)
-            
+
             # 3. Calculate compensation ratio
             # win_size is the total possible pixels (e.g., 9 for a 3x3 kernel)
             win_size = self.kernel_size[0] * self.kernel_size[1]
-            
+
             # If mask_count is 0, the ratio is 0 (to avoid div by zero)
             # If mask_count > 0, we scale the output
             mask_ratio = win_size / (mask_count + 1e-8)
-            
+
             # 4. Create the mask for the NEXT layer
             # Any pixel where mask_count > 0 becomes a 1
             new_mask = clamp(mask_count, 0, 1)
@@ -108,6 +110,7 @@ class PartialConv2d(nn.Conv2d):
             output = output * mask_ratio * new_mask
 
         return output, new_mask
+
 
 class UnetLayer(nn.Module):
     def __init__(
@@ -140,12 +143,13 @@ class UnetLayer(nn.Module):
         x = self.ResBlock2(x)
         return self.conv(x), x
 
+
 class UNET(nn.Module):
     def __init__(
         self,
-        Channels = [32, 64, 128, 256, 128, 64],
-        Attentions = [False, False, False, True, False, False],
-        Upscales = [ False, False, False, True, True, True],
+        Channels=[32, 64, 128, 256, 128, 64],
+        Attentions=[False, False, False, True, False, False],
+        Upscales=[False, False, False, True, True, True],
         num_groups: int = 16,
         dropout_prob: float = 0.05,
         num_heads: int = 8,
@@ -161,11 +165,15 @@ class UNET(nn.Module):
         self.continuous_embeddings = ContinuousEmbedding(64, 16)
 
         self.shallow_conv = PartialConv2d(
-            input_channels + 8 + 16 + 2, Channels[0], kernel_size=17, dilation=4, padding=32
+            input_channels + 8 + 16 + 2,
+            Channels[0],
+            kernel_size=17,
+            dilation=4,
+            padding=32,
         )
 
-        out_channels = (Channels[-1] // 2)
-        #out_channels = (Channels[-1] // 2) + (Channels[0])
+        out_channels = Channels[-1] // 2
+        # out_channels = (Channels[-1] // 2) + (Channels[0])
 
         for i in range(self.num_layers):
             layer = UnetLayer(
@@ -189,11 +197,11 @@ class UNET(nn.Module):
 
         mask = mask.float()
 
-        continuous = self.continuous_embeddings((data[:,0,:,:]))
-        discrete = self.discrete_embeddings(data[:,1,:,:].long())
+        continuous = self.continuous_embeddings((data[:, 0, :, :]))
+        discrete = self.discrete_embeddings(data[:, 1, :, :].long())
         coords = self.coords(data)
         combined = cat([data, continuous, discrete, coords], dim=1)
-        data, mask= self.shallow_conv(combined, mask)
+        data, mask = self.shallow_conv(combined, mask)
 
         residuals = []
 
@@ -205,9 +213,9 @@ class UNET(nn.Module):
         for i in range(self.num_layers // 2, self.num_layers):
             layer = getattr(self, f"Layer{i + 1}")
             data, _r = layer(data)
-            #x = concat(
+            # x = concat(
             #    (x, residuals[self.num_layers - i - 1]), dim=1
-            #)
+            # )
 
         data = self.late_conv(data)
         data = self.relu(data)

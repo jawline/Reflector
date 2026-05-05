@@ -4,19 +4,11 @@ from torch import (
 )
 from tqdm import tqdm
 
-from torch import (
-    rand,
-    rand_like,
-    logical_not,
-    transpose,
-    ones_like
-)
+from torch import rand, rand_like, logical_not, transpose, ones_like
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 # from infer import display_reverse
 from models.util import set_seed, dataloader, apply_batch_noise, display_images
-
-
 
 
 def train(
@@ -37,7 +29,6 @@ def train(
     scheduler = ReduceLROnPlateau(
         model.optimizer, mode="min", patience=0, factor=0.1, threshold=0.001
     )
-
 
     for i in range(num_epochs):
 
@@ -77,17 +68,20 @@ def train(
                 min_noise = 0.01
                 max_noise = 0.2
                 noise_thresh_per_batch_elt = (
-                    min_noise
-                    + (rand((batch_size, 1, 1, 1)) * (max_noise - min_noise))
+                    min_noise + (rand((batch_size, 1, 1, 1)) * (max_noise - min_noise))
                 ).to(device)
-                additional_noise = rand_like(batch_noise.float()) > noise_thresh_per_batch_elt
+                additional_noise = (
+                    rand_like(batch_noise.float()) > noise_thresh_per_batch_elt
+                )
             else:
                 additional_noise = ones_like(batch_noise)
 
             total_mask = logical_and(batch_noise, additional_noise)
             for_autoencoder = for_train * total_mask
 
-            output, loss = model.train_step(for_autoencoder, total_mask, for_train[:,0:1,:,:])
+            output, loss = model.train_step(
+                for_autoencoder, total_mask, for_train[:, 0:1, :, :]
+            )
             total_loss += loss.item()
 
             reconstructed = (for_train * mask) + (logical_not(mask) * output)
@@ -109,20 +103,18 @@ def train(
                     dec_decoded = output.to("cpu")[elt][0].detach()
                     dec_mask = mask.to("cpu")[elt][0].detach()
                     dec_reconstructed = reconstructed.to("cpu")[elt][0].detach()
-                    dec_clas_reconstructed = reconstructed.to("cpu")[elt][
-                        1
-                    ].detach()
+                    dec_clas_reconstructed = reconstructed.to("cpu")[elt][1].detach()
                     display_images(
-                       [
-                           dec_for_train,
-                           dec_clas_train,
-                           dec_mask,
-                           dec_for_autoencoder,
-                           dec_decoded,
-                           dec_reconstructed,
-                           dec_clas_reconstructed,
-                       ],
-                       to_file=elt,
+                        [
+                            dec_for_train,
+                            dec_clas_train,
+                            dec_mask,
+                            dec_for_autoencoder,
+                            dec_decoded,
+                            dec_reconstructed,
+                            dec_clas_reconstructed,
+                        ],
+                        to_file=elt,
                     )
 
         avg_loss = total_loss / dataset_per_epoch

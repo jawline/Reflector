@@ -24,6 +24,7 @@ from labml_nn.diffusion.stable_diffusion.model.autoencoder import (
     Decoder,
 )
 
+
 class Autoencode:
 
     def __init__(self, lr, device=None):
@@ -67,10 +68,11 @@ class Autoencode:
         except Exception as e:
             print("Could not load checkpoint", e)
 
-
     def infer(self, src_frame, src_mask, device=None):
         with no_grad():
-            encoded = self.autoencoder.encode((src_frame * src_mask) + (-1 * logical_not(src_mask)))
+            encoded = self.autoencoder.encode(
+                (src_frame * src_mask) + (-1 * logical_not(src_mask))
+            )
             sample = encoded.sample()
             decoded = self.autoencoder.decode(sample)
 
@@ -203,16 +205,16 @@ class Autoencode:
                             1
                         ].detach()
                         display_images(
-                           [
-                               dec_for_train,
-                               dec_clas_train,
-                               dec_mask,
-                               dec_for_autoencoder,
-                               dec_decoded,
-                               dec_reconstructed,
-                               dec_clas_reconstructed,
-                           ],
-                           to_file=elt,
+                            [
+                                dec_for_train,
+                                dec_clas_train,
+                                dec_mask,
+                                dec_for_autoencoder,
+                                dec_decoded,
+                                dec_reconstructed,
+                                dec_clas_reconstructed,
+                            ],
+                            to_file=elt,
                         )
 
             avg_loss = total_loss / dataset_per_epoch

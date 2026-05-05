@@ -43,9 +43,7 @@ def main():
         dataset = TerrainDataset(dataset)
         model = SimpleModel(lr=1e-4, device=device)
         model.load(checkpoint)
-        train(
-            model, dataset, num_epochs=75, device=device, checkpoint_path=checkpoint
-        )
+        train(model, dataset, num_epochs=75, device=device, checkpoint_path=checkpoint)
     elif mode == "infer":
         print("Starting inference")
         print("Loading", dataset)

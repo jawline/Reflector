@@ -13,7 +13,7 @@ from torch import (
     ones,
     zeros,
 )
-from constants import num_time_steps 
+from constants import num_time_steps
 from torchvision.transforms.v2 import Resize
 from torchvision.transforms.functional import adjust_sharpness
 
@@ -177,7 +177,9 @@ def tiled_inference(src_frame, src_mask, src_keep, model, kernel_size, device):
                     -1 * logical_not(additional_tile_mask)
                 )
 
-                inference = model.infer(additional_tile_data, additional_tile_mask, device=device)
+                inference = model.infer(
+                    additional_tile_data, additional_tile_mask, device=device
+                )
                 # display_reverse(
                 #    [
                 #        additional_tile_data.to("cpu"),

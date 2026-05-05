@@ -7,7 +7,7 @@ from torch import (
     rand,
     sum,
 )
-from constants import num_time_steps 
+from constants import num_time_steps
 
 
 def display_reverse(images: List, to_file=None):
@@ -33,10 +33,10 @@ def display_reverse(images: List, to_file=None):
 
 
 def prepare_model(device, checkpoint_path, ema_decay, num_time_steps):
-    #scheduler, model, optimizer, ema, scaler = model_loader.load(
+    # scheduler, model, optimizer, ema, scaler = model_loader.load(
     #    device, checkpoint_path, ema_decay, num_time_steps, lr=0.1
-    #)
-    #return ema, scheduler
+    # )
+    # return ema, scheduler
     return None
 
 
@@ -119,5 +119,3 @@ def generative_inference(
                 device, z, mask, model, scheduler, num_time_steps, times
             )
             display_reverse(images)
-
-
