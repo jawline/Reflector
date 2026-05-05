@@ -1,11 +1,7 @@
 from dataset import TerrainDataset
-from math import isnan
 import matplotlib.pyplot as plt
-import numpy as np
 import sys
-from time import sleep
-from plttool import handle_close, wait_for_key_press
-from tqdm import tqdm
+from plttool import handle_close
 
 dataset = sys.argv[-1]
 print(dataset)

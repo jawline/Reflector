@@ -1,4 +1,4 @@
-from torch import nn, linspace, cumprod, randn_like, sqrt, logical_not
+from torch import linspace, cumprod, randn_like, sqrt
 
 
 class DDPM_Scheduler:

@@ -11,11 +11,6 @@ def main():
     from_ = sys.argv[-2]
     to_ = sys.argv[-1]
 
-    device = torch.device("cpu")
-    if torch.backends.mps.is_available():
-        print("Apple Silicon acceleration possible")
-        device = torch.device("mps")
-
     dataset = TerrainDatasetSlow(from_)
 
     dataset = DataLoader(

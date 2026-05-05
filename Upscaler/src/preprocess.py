@@ -1,9 +1,9 @@
 import pickle
 import functools
-from torch import tensor, logical_not, masked_select, cat, isnan, nan_to_num, flip
+from torch import tensor, logical_not, masked_select, cat, nan_to_num
 from torch.utils.data import Dataset
 from glob import glob
-from math import floor, ceil
+from math import ceil
 from random import Random
 from tqdm import tqdm
 from constants import tile_size
@@ -52,10 +52,9 @@ def load(path):
     assert classification["width"] == width
     assert classification["height"] == height
 
-    with_nan = tensor([x if x != None else nan for x in heightmap["data"]]).reshape(
+    with_nan = tensor([x if x is not None else nan for x in heightmap["data"]]).reshape(
         (height, width)
     )
-    nans = isnan(with_nan)
     without_nan = nan_to_num(with_nan, nan=0.0)
     classification = tensor([x for x in classification["data"]]).reshape(with_nan.shape)
 

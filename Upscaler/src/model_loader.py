@@ -1,6 +1,5 @@
 import torch
 from ddpm_scheduler import DDPM_Scheduler
-from unet import UNET
 from torch.optim import Adam
 from timm.utils import ModelEmaV3
 from labml_nn.diffusion.stable_diffusion.model.autoencoder import (
