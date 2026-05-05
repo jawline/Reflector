@@ -1,4 +1,4 @@
-from torch import nn, cat, linspace, no_grad, clamp 
+from torch import nn, cat, linspace, no_grad, clamp, no_grad
 from torch.nn.functional import scaled_dot_product_attention
 from einops import rearrange
 from .embeddings import ContinuousEmbedding, DiscreteEmbedding
@@ -78,31 +78,36 @@ class PartialConv2d(nn.Conv2d):
             param.requires_grad = False
 
     def forward(self, input, mask):
-        # input: [B, C, H, W], mask: [B, 1, H, W]
-
-        print(input.shape, mask.shape)
-        # Apply mask to all input channels
+        # 1. Standard convolution on MASKED input
+        # This prevents 'leaking' padded zeros or invalid data into the sum
         output = super().forward(input * mask)
 
-        with torch.no_grad():
-            # Calculate how many valid pixels were in the kernel window
+        with no_grad():
+            # 2. Count valid pixels in the window
             mask_count = self.mask_conv(mask)
-
-            # Total pixels in the current kernel/dilation footprint
+            
+            # 3. Calculate compensation ratio
+            # win_size is the total possible pixels (e.g., 9 for a 3x3 kernel)
             win_size = self.kernel_size[0] * self.kernel_size[1]
-
-            # Avoid division by zero
-            # If mask_count is 0, the output is 0 anyway, so we just clamp
+            
+            # If mask_count is 0, the ratio is 0 (to avoid div by zero)
+            # If mask_count > 0, we scale the output
             mask_ratio = win_size / (mask_count + 1e-8)
+            
+            # 4. Create the mask for the NEXT layer
+            # Any pixel where mask_count > 0 becomes a 1
+            new_mask = clamp(mask_count, 0, 1)
 
-            # New mask: if ANY pixel in the window was valid, the output is valid
-            updated_mask = torch.clamp(mask_count, 0, 1)
+        # 5. Apply scaling and bias (bias must be handled separately in PConv)
+        # We multiply by new_mask to ensure invalid regions stay 0
+        if self.bias is not None:
+            bias_view = self.bias.view(1, self.out_channels, 1, 1)
+            output = (output - bias_view) * mask_ratio + bias_view
+            output = output * new_mask
+        else:
+            output = output * mask_ratio * new_mask
 
-        # Apply the scaling factor (broadcasts across C dimension)
-        # Only scale where the new mask is valid
-        output = output * mask_ratio * updated_mask
-
-        return output, updated_mask
+        return output, new_mask
 
 class UnetLayer(nn.Module):
     def __init__(
@@ -138,7 +143,7 @@ class UnetLayer(nn.Module):
 class UNET(nn.Module):
     def __init__(
         self,
-        Channels = [64, 128, 256, 512, 256, 128],
+        Channels = [32, 64, 128, 256, 128, 64],
         Attentions = [False, False, False, True, False, False],
         Upscales = [ False, False, False, True, True, True],
         num_groups: int = 16,
@@ -182,6 +187,8 @@ class UNET(nn.Module):
 
     def forward(self, data, mask):
 
+        mask = mask.float()
+
         continuous = self.continuous_embeddings((data[:,0,:,:]))
         discrete = self.discrete_embeddings(data[:,1,:,:].long())
         coords = self.coords(data)
@@ -192,16 +199,16 @@ class UNET(nn.Module):
 
         for i in range(self.num_layers // 2):
             layer = getattr(self, f"Layer{i + 1}")
-            x, r = layer(x)
+            data, r = layer(data)
             residuals.append(r)
 
         for i in range(self.num_layers // 2, self.num_layers):
             layer = getattr(self, f"Layer{i + 1}")
-            x, _r = layer(x)
+            data, _r = layer(data)
             #x = concat(
             #    (x, residuals[self.num_layers - i - 1]), dim=1
             #)
 
-        x = self.late_conv(x, mask)
-        x = self.relu(x)
-        return self.output_conv(x)
+        data = self.late_conv(data)
+        data = self.relu(data)
+        return self.output_conv(data)

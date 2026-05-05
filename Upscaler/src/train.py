@@ -22,7 +22,7 @@ from models.util import set_seed, dataloader, apply_batch_noise, display_images
 def train(
     model,
     dataset,
-    batch_size: int = 4,
+    batch_size: int = 8,
     num_epochs: int = 150,
     seed: int = -1,
     ema_decay: float = 0.9999,
@@ -80,14 +80,13 @@ def train(
                     min_noise
                     + (rand((batch_size, 1, 1, 1)) * (max_noise - min_noise))
                 ).to(device)
-                additional_noise = rand_like(batch_noise) > noise_thresh_per_batch_elt
+                additional_noise = rand_like(batch_noise.float()) > noise_thresh_per_batch_elt
             else:
                 additional_noise = ones_like(batch_noise)
 
             total_mask = logical_and(batch_noise, additional_noise)
             for_autoencoder = for_train * total_mask
 
-            print(total_mask.shape, batch_noise.shape, additional_noise.shape)
             output, loss = model.train_step(for_autoencoder, total_mask, for_train[:,0:1,:,:])
             total_loss += loss.item()
 
