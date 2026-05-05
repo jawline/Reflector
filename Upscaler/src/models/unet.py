@@ -1,4 +1,4 @@
-from torch import nn, cat, linspace, no_grad, clamp, no_grad
+from torch import nn, cat, linspace, clamp, no_grad
 from torch.nn.functional import scaled_dot_product_attention
 from einops import rearrange
 from .embeddings import ContinuousEmbedding, DiscreteEmbedding
