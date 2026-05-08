@@ -80,7 +80,7 @@ def train(
             for_autoencoder = for_train * total_mask
 
             output, loss = model.train_step(
-                for_autoencoder, total_mask, for_train[:, 0:1, :, :]
+                for_autoencoder, total_mask, for_train[:, 0:1, :, :], mask
             )
             total_loss += loss.item()
 
@@ -121,7 +121,7 @@ def train(
         scheduler.step(avg_loss)
 
         print(
-            f"Epoch {i + 1} | Loss {total_loss / (dataset_len / batch_size):.5f} (Saved)"
+            f"Epoch {i + 1} | Loss {total_loss / (dataset_len / batch_size)} (Saved)"
         )
 
         if total_loss < 0:

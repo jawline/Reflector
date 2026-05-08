@@ -1,5 +1,5 @@
-from torch import nn, cat, linspace, clamp, no_grad
-from torch.nn.functional import scaled_dot_product_attention
+from torch import nn, cat, linspace, clamp, no_grad, ones, ones_like, zeros, sqrt, max, concat
+from torch.nn.functional import scaled_dot_product_attention, conv2d, conv_transpose2d, conv2d, pad
 from einops import rearrange
 from .embeddings import ContinuousEmbedding, DiscreteEmbedding
 
@@ -30,23 +30,6 @@ class Attention(nn.Module):
         return rearrange(x, "b h w C -> b C h w")
 
 
-class ResBlock(nn.Module):
-    def __init__(self, C: int, num_groups: int, dropout_prob: float):
-        super().__init__()
-        self.relu = nn.ReLU(inplace=True)
-        self.gnorm1 = nn.GroupNorm(num_groups=num_groups, num_channels=C)
-        self.gnorm2 = nn.GroupNorm(num_groups=num_groups, num_channels=C)
-        self.conv1 = nn.Conv2d(C, C, kernel_size=3, dilation=2, padding=2)
-        self.conv2 = nn.Conv2d(C, C, kernel_size=3, dilation=2, padding=2)
-        self.dropout = nn.Dropout(p=dropout_prob, inplace=True)
-
-    def forward(self, x):
-        x = x  # + embeddings[:, : x.shape[0], :, :]
-        r = self.conv1(self.relu(self.gnorm1(x)))
-        r = self.dropout(r)
-        r = self.conv2(self.relu(self.gnorm2(r)))
-        return r + x
-
 
 class AddCoords(nn.Module):
     def __init__(self, height, width):
@@ -69,87 +52,200 @@ class AddCoords(nn.Module):
 class PartialConv2d(nn.Conv2d):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Multi-channel mask weight: [Out, In, H, W]
+        mask_weight = ones(self.out_channels, self.in_channels, *self.kernel_size)
+        self.register_buffer('mask_weight', mask_weight)
+        self.max_mask_val = self.in_channels * self.kernel_size[0] * self.kernel_size[1]
 
-        self.mask_conv = nn.Conv2d(
-            1, 1, self.kernel_size, self.stride, self.padding, self.dilation, bias=False
-        )
+    def forward(self, x, mask=None):
 
-        nn.init.constant_(self.mask_conv.weight, 1.0)
-
-        for param in self.mask_conv.parameters():
-            param.requires_grad = False
-
-    def forward(self, input, mask):
-        # 1. Standard convolution on MASKED input
-        # This prevents 'leaking' padded zeros or invalid data into the sum
-        output = super().forward(input * mask)
+        # Use 'replicate' instead of 'reflection' - it's more robust at edges
+        p = (self.padding[1], self.padding[1], self.padding[0], self.padding[0])
+        x_padded = pad(x * mask, p, mode='replicate')
+        mask_padded = pad(mask, p, mode='constant', value=0)
 
         with no_grad():
-            # 2. Count valid pixels in the window
-            mask_count = self.mask_conv(mask)
+            # padding=0 because we padded manually
+            mask_sum = conv2d(mask_padded, self.mask_weight, None, 
+                                self.stride, 0, self.dilation, self.groups)
+            
+            mask_ratio = self.max_mask_val / (mask_sum + 1e-8)
+            new_mask = clamp(mask_sum, 0, 1)
 
-            # 3. Calculate compensation ratio
-            # win_size is the total possible pixels (e.g., 9 for a 3x3 kernel)
-            win_size = self.kernel_size[0] * self.kernel_size[1]
+        raw_out = conv2d(x_padded, self.weight, None, 
+                           self.stride, 0, self.dilation, self.groups)
 
-            # If mask_count is 0, the ratio is 0 (to avoid div by zero)
-            # If mask_count > 0, we scale the output
-            mask_ratio = win_size / (mask_count + 1e-8)
-
-            # 4. Create the mask for the NEXT layer
-            # Any pixel where mask_count > 0 becomes a 1
-            new_mask = clamp(mask_count, 0, 1)
-
-        # 5. Apply scaling and bias (bias must be handled separately in PConv)
-        # We multiply by new_mask to ensure invalid regions stay 0
+        output = raw_out * mask_ratio
+        
         if self.bias is not None:
-            bias_view = self.bias.view(1, self.out_channels, 1, 1)
-            output = (output - bias_view) * mask_ratio + bias_view
-            output = output * new_mask
-        else:
-            output = output * mask_ratio * new_mask
+            output += self.bias.view(1, self.out_channels, 1, 1)
 
-        return output, new_mask
+        return output * new_mask, new_mask
+
+class PartialConvTranspose2d(nn.ConvTranspose2d):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Transpose weight shape: [in_channels, out_channels, k, k]
+        mask_weight = ones(self.in_channels, self.out_channels, *self.kernel_size)
+        self.register_buffer('mask_weight', mask_weight)
+
+        # In Transpose, the scaling is based on the input channels contributing to the output
+        self.max_mask_val = self.in_channels * self.kernel_size[0] * self.kernel_size[1]
+
+    def forward(self, x, mask=None):
+
+        with no_grad():
+            mask_sum = conv_transpose2d(mask, self.mask_weight, None,
+                                          self.stride, 0, self.output_padding,
+                                          self.groups, self.dilation)
+            mask_ratio = self.max_mask_val / (mask_sum + 1e-8)
+            new_mask = clamp(mask_sum, 0, 1)
+
+        raw_out = conv_transpose2d(x * mask, self.weight, None,
+                                     self.stride, 0, self.output_padding,
+                                     self.groups, self.dilation)
+
+        output = raw_out * mask_ratio
+        if self.bias is not None:
+            output += self.bias.view(1, self.out_channels, 1, 1)
+
+        # Manual Cropping
+        if self.padding[0] > 0 or self.padding[1] > 0:
+            p_h, p_w = self.padding
+            output = output[:, :, p_h:-p_h, p_w:-p_w]
+            new_mask = new_mask[:, :, p_h:-p_h, p_w:-p_w]
+
+        return output * new_mask, new_mask
+
+class MaskedInstanceNorm2d(nn.Module):
+    def __init__(self, num_features, eps=1e-5, affine=True):
+        super().__init__()
+        self.eps = eps
+        self.affine = affine
+        if self.affine:
+            self.weight = nn.Parameter(ones(num_features))
+            self.bias = nn.Parameter(zeros(num_features))
+
+    def forward(self, x, mask):
+        x = x * mask
+
+        mask_sum = mask.sum(dim=(2, 3), keepdim=True)
+        mu = x.sum(dim=(2, 3), keepdim=True) / (mask_sum + 1e-8)
+
+        x_shifted = (x - mu)
+        var = (x_shifted ** 2).sum(dim=(2, 3), keepdim=True) / (mask_sum + self.eps)
+        x_normed = x_shifted / sqrt(var + self.eps)
+        
+        # 2. Apply weights and bias
+        if self.affine:
+            # We MUST multiply the bias by the mask so it stays 0 in the holes
+            w = self.weight.view(1, -1, 1, 1)
+            b = self.bias.view(1, -1, 1, 1)
+            x_normed = (x_normed * w) + b # Only add bias to valid pixels
+            
+        return x_normed * mask
 
 
-class UnetLayer(nn.Module):
+class ResBlock(nn.Module):
+    def __init__(self, C: int, num_groups: int, dropout_prob: float):
+        super().__init__()
+        self.relu = nn.ReLU(inplace=True)
+        self.norm1 = MaskedInstanceNorm2d(C, affine=True)
+        self.norm2 = MaskedInstanceNorm2d(C, affine=True)
+        self.conv1 = PartialConv2d(C, C, kernel_size=3, dilation=2, padding=2)
+        self.conv2 = PartialConv2d(C, C, kernel_size=3, dilation=2, padding=2)
+        self.dropout = nn.Dropout(p=dropout_prob, inplace=True)
+
+    def forward(self, inp, mask):
+        
+        x = inp
+        x = self.norm1(x, mask) 
+        x = self.relu(x)
+        x, mask = self.conv1(x, mask)
+
+        x = self.dropout(x)
+
+        x = self.norm2(x, mask) 
+        x = self.relu(x)
+        x, mask = self.conv2(x, mask)
+
+        return inp + x, mask
+
+class DownLayer(nn.Module):
+
     def __init__(
         self,
-        upscale: bool,
-        attention: bool,
         num_groups: int,
         dropout_prob: float,
         num_heads: int,
         C: int,
     ):
         super().__init__()
-        self.ResBlock1 = ResBlock(C=C, num_groups=num_groups, dropout_prob=dropout_prob)
-        self.ResBlock2 = ResBlock(C=C, num_groups=num_groups, dropout_prob=dropout_prob)
-        if upscale:
-            self.conv = nn.ConvTranspose2d(
-                C, C // 2, kernel_size=4, stride=2, padding=1
-            )
-        else:
-            self.conv = nn.Conv2d(C, C * 2, kernel_size=3, stride=2, padding=1)
-        if attention:
-            self.attention_layer = Attention(
-                C, num_heads=num_heads, dropout_prob=dropout_prob
-            )
+        self.relu = nn.ReLU(inplace=True)
+        self.r = ResBlock(C=C, num_groups=num_groups, dropout_prob=dropout_prob)
+        self.conv = PartialConv2d(C, C * 2, kernel_size=3, stride=2, padding=1)
 
-    def forward(self, x):
-        x = self.ResBlock1(x)
-        if hasattr(self, "attention_layer"):
-            x = self.attention_layer(x)
-        x = self.ResBlock2(x)
-        return self.conv(x), x
+    def forward(self, x, mask):
+        residual, residual_mask = self.r(x, mask)
+        downsample, mask = self.conv(residual, residual_mask)
+        return self.relu(downsample), mask, residual, residual_mask
 
+class UpLayer(nn.Module):
 
-class UNET(nn.Module):
     def __init__(
         self,
-        Channels=[32, 64, 128, 256, 128, 64],
-        Attentions=[False, False, False, True, False, False],
-        Upscales=[False, False, False, True, True, True],
+        num_groups: int,
+        dropout_prob: float,
+        num_heads: int,
+        C: int,
+    ):
+        super().__init__()
+        self.relu = nn.ReLU(inplace=True)
+        self.r = ResBlock(C=C, num_groups=num_groups, dropout_prob=dropout_prob)
+        self.conv = PartialConvTranspose2d(C, C // 2, kernel_size=4, stride=2, padding=1)
+
+    def forward(self, x, mask):
+        x, mask = self.r(x, mask)
+        upsample, mask = self.conv(x, mask)
+        return upsample, mask
+
+# class UnetLayer(nn.Module):
+#     def __init__(
+#         self,
+#         upscale: bool,
+#         attention: bool,
+#         num_groups: int,
+#         dropout_prob: float,
+#         num_heads: int,
+#         C: int,
+#     ):
+#         super().__init__()
+#         self.ResBlock1 = ResBlock(C=C, num_groups=num_groups, dropout_prob=dropout_prob)
+#         self.ResBlock2 = ResBlock(C=C, num_groups=num_groups, dropout_prob=dropout_prob)
+#         if upscale:
+#             self.conv = nn.ConvTranspose2d(
+#                 C, C // 2, kernel_size=4, stride=2, padding=1
+#             )
+#         else:
+#             self.conv = nn.Conv2d(C, C * 2, kernel_size=3, stride=2, padding=1)
+#         if attention:
+#             self.attention_layer = Attention(
+#                 C, num_heads=num_heads, dropout_prob=dropout_prob
+#             )
+# 
+#     def forward(self, x):
+#         x = self.ResBlock1(x)
+#         if hasattr(self, "attention_layer"):
+#             x = self.attention_layer(x)
+#         x = self.ResBlock2(x)
+#         return self.conv(x), x
+
+
+class Net(nn.Module):
+    def __init__(
+        self,
+        Downsamples=[16, 32, 64],
+        Upsamples=[128, 128, 64 + 32],
         num_groups: int = 16,
         dropout_prob: float = 0.05,
         num_heads: int = 8,
@@ -158,65 +254,69 @@ class UNET(nn.Module):
     ):
         super().__init__()
         self.coords = AddCoords(256, 256)
-        self.num_layers = len(Channels)
 
         # 3 categories (Unknown | Building | Terrain)
         self.discrete_embeddings = DiscreteEmbedding(3, 8)
-        self.continuous_embeddings = ContinuousEmbedding(64, 16)
 
         self.shallow_conv = PartialConv2d(
-            input_channels + 8 + 16 + 2,
-            Channels[0],
-            kernel_size=17,
-            dilation=4,
-            padding=32,
+            1 + 8 + 2,
+            Downsamples[0],
+            kernel_size=16,
+            dilation=2,
+            padding=15,
         )
 
-        out_channels = Channels[-1] // 2
-        # out_channels = (Channels[-1] // 2) + (Channels[0])
+        self.downsamples = nn.ModuleList([ DownLayer(num_groups=num_groups, dropout_prob=dropout_prob, C=channels, num_heads=num_heads) for channels in Downsamples])
+        self.upsamples = nn.ModuleList([ UpLayer(num_groups=num_groups, dropout_prob=dropout_prob, C=channels, num_heads=num_heads) for channels in Upsamples])
 
-        for i in range(self.num_layers):
-            layer = UnetLayer(
-                upscale=Upscales[i],
-                attention=Attentions[i],
-                num_groups=num_groups,
-                dropout_prob=dropout_prob,
-                C=Channels[i],
-                num_heads=num_heads,
-            )
-            setattr(self, f"Layer{i + 1}", layer)
+        out_channels = Upsamples[-1] // 2
 
-        self.late_conv = nn.Conv2d(
+        self.late_conv = PartialConv2d(
             out_channels, out_channels // 2, kernel_size=3, padding=1
         )
 
-        self.output_conv = nn.Conv2d(out_channels // 2, output_channels, kernel_size=1)
+        self.output_conv = PartialConv2d(out_channels // 2, output_channels, kernel_size=1)
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, data, mask):
-
         mask = mask.float()
 
-        continuous = self.continuous_embeddings((data[:, 0, :, :]))
         discrete = self.discrete_embeddings(data[:, 1, :, :].long())
+        origin = data[:,0:1,:,:]
         coords = self.coords(data)
-        combined = cat([data, continuous, discrete, coords], dim=1)
-        data, mask = self.shallow_conv(combined, mask)
+
+        data = cat([origin, discrete, coords], dim=1)
+
+        # Set mask 0s for the non data channels, embeddings
+        extra_channels = discrete.shape[1] + coords.shape[1]
+        extra_mask = zeros(mask.shape[0], extra_channels, mask.shape[2], mask.shape[3], device=mask.device)
+        mask = cat([mask, extra_mask], dim=1)
+
+        data, mask = self.shallow_conv(data, mask)
+
 
         residuals = []
+        residual_masks = []
 
-        for i in range(self.num_layers // 2):
-            layer = getattr(self, f"Layer{i + 1}")
-            data, r = layer(data)
-            residuals.append(r)
+        for layer in self.downsamples:
+            data, mask, residual, residual_mask = layer(data, mask)
+            residuals.append(residual)
+            residual_masks.append(residual_mask)
 
-        for i in range(self.num_layers // 2, self.num_layers):
-            layer = getattr(self, f"Layer{i + 1}")
-            data, _r = layer(data)
-            # x = concat(
-            #    (x, residuals[self.num_layers - i - 1]), dim=1
-            # )
+        for i, layer in enumerate(self.upsamples):
+            #for residual in residuals:
+            #    print("RS", residual.shape)
+            if i > 0:
+                residual = residuals.pop()
+                residual_mask = residual_masks.pop()
+                data = concat((data, residual), dim=1)
+                mask = concat((mask, residual_mask), dim=1)
+            data, mask = layer(data, mask)
 
-        data = self.late_conv(data)
+
+        data, mask = self.late_conv(data, mask)
         data = self.relu(data)
-        return self.output_conv(data)
+        data, mask = self.output_conv(data, mask)
+        data = self.relu(data)
+
+        return origin + data
