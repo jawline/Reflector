@@ -1,5 +1,5 @@
 from torch import nn, cat, linspace, clamp, no_grad, ones, ones_like, zeros, sqrt, max, concat
-from torch.nn.functional import scaled_dot_product_attention, conv2d, conv_transpose2d, conv2d, pad
+from torch.nn.functional import scaled_dot_product_attention, conv2d, conv_transpose2d, conv2d, pad, one_hot
 from einops import rearrange
 from .embeddings import ContinuousEmbedding, DiscreteEmbedding
 
@@ -12,23 +12,36 @@ class Attention(nn.Module):
         self.num_heads = num_heads
         self.dropout_prob = dropout_prob
 
-    def forward(self, x):
-        h, w = x.shape[2:]
+    def forward(self, x, mask): # Accept mask here
+        b, c, h, w = x.shape
+
+        if mask is not None:
+            # 1. Take only the first channel of the mask [B, 1, H, W]
+            # 2. Flatten to [B, 1, L]
+            # 3. Add a dimension for heads to get [B, 1, 1, L]
+            m = mask[:, :1, :, :] 
+            m = rearrange(m, "b c h w -> b c (h w)").unsqueeze(1) 
+            # m is now [8, 1, 1, 1024] - this will work!
+        else:
+            m = None
+    
         x = rearrange(x, "b c h w -> b (h w) c")
         x = self.proj1(x)
         x = rearrange(x, "b L (C H K) -> K b H L C", K=3, H=self.num_heads)
-
+        
         q, k, v = x[0], x[1], x[2]
-
+    
+        # Pass the mask here
         x = scaled_dot_product_attention(
-            q, k, v, is_causal=False, dropout_p=self.dropout_prob
+            q, k, v, 
+            attn_mask=m, # Apply the flattened mask
+            is_causal=False, 
+            dropout_p=self.dropout_prob if self.training else 0
         )
-
+    
         x = rearrange(x, "b H (h w) C -> b h w (C H)", h=h, w=w)
         x = self.proj2(x)
-
         return rearrange(x, "b h w C -> b C h w")
-
 
 
 class AddCoords(nn.Module):
@@ -159,6 +172,7 @@ class ResBlock(nn.Module):
     def forward(self, inp, mask):
         
         x = inp
+
         x = self.norm1(x, mask) 
         x = self.relu(x)
         x, mask = self.conv1(x, mask)
@@ -188,7 +202,8 @@ class DownLayer(nn.Module):
     def forward(self, x, mask):
         residual, residual_mask = self.r(x, mask)
         downsample, mask = self.conv(residual, residual_mask)
-        return self.relu(downsample), mask, residual, residual_mask
+        downsample = self.relu(downsample)
+        return downsample, mask, residual, residual_mask
 
 class UpLayer(nn.Module):
 
@@ -201,44 +216,38 @@ class UpLayer(nn.Module):
     ):
         super().__init__()
         self.relu = nn.ReLU(inplace=True)
-        self.r = ResBlock(C=C, num_groups=num_groups, dropout_prob=dropout_prob)
+        self.r = ResBlock(C=C // 2, num_groups=num_groups, dropout_prob=dropout_prob)
         self.conv = PartialConvTranspose2d(C, C // 2, kernel_size=4, stride=2, padding=1)
 
     def forward(self, x, mask):
+        x, mask = self.conv(x, mask)
+        x = self.relu(x)
         x, mask = self.r(x, mask)
-        upsample, mask = self.conv(x, mask)
-        return upsample, mask
+        return x, mask
 
-# class UnetLayer(nn.Module):
-#     def __init__(
-#         self,
-#         upscale: bool,
-#         attention: bool,
-#         num_groups: int,
-#         dropout_prob: float,
-#         num_heads: int,
-#         C: int,
-#     ):
-#         super().__init__()
-#         self.ResBlock1 = ResBlock(C=C, num_groups=num_groups, dropout_prob=dropout_prob)
-#         self.ResBlock2 = ResBlock(C=C, num_groups=num_groups, dropout_prob=dropout_prob)
-#         if upscale:
-#             self.conv = nn.ConvTranspose2d(
-#                 C, C // 2, kernel_size=4, stride=2, padding=1
-#             )
-#         else:
-#             self.conv = nn.Conv2d(C, C * 2, kernel_size=3, stride=2, padding=1)
-#         if attention:
-#             self.attention_layer = Attention(
-#                 C, num_heads=num_heads, dropout_prob=dropout_prob
-#             )
-# 
-#     def forward(self, x):
-#         x = self.ResBlock1(x)
-#         if hasattr(self, "attention_layer"):
-#             x = self.attention_layer(x)
-#         x = self.ResBlock2(x)
-#         return self.conv(x), x
+class AttentionLayer(nn.Module):
+
+
+    def __init__(
+        self,
+        num_groups: int,
+        dropout_prob: float,
+        num_heads: int,
+        C: int,
+    ):
+        super().__init__()
+        self.relu = nn.ReLU(inplace=True)
+        self.norm = MaskedInstanceNorm2d(C, affine=True)
+        self.r = ResBlock(C=C, num_groups=num_groups, dropout_prob=dropout_prob)
+        self.a = Attention(C=C, num_heads=num_heads, dropout_prob=dropout_prob)
+
+    def forward(self, x, mask):
+        origin = x
+        x = self.norm(x, mask)
+        x, mask = self.r(x, mask)
+        x = self.relu(x)
+        x = self.a(x, mask)
+        return origin + x, mask
 
 
 class Net(nn.Module):
@@ -246,8 +255,9 @@ class Net(nn.Module):
         self,
         Downsamples=[16, 32, 64],
         Upsamples=[128, 128, 64 + 32],
+        num_attention : int= 4,
         num_groups: int = 16,
-        dropout_prob: float = 0.05,
+        dropout_prob: float = 0.01,
         num_heads: int = 8,
         input_channels: int = 2,
         output_channels: int = 1,
@@ -255,11 +265,8 @@ class Net(nn.Module):
         super().__init__()
         self.coords = AddCoords(256, 256)
 
-        # 3 categories (Unknown | Building | Terrain)
-        self.discrete_embeddings = DiscreteEmbedding(3, 8)
-
         self.shallow_conv = PartialConv2d(
-            1 + 8 + 2,
+            1 + 3 + 2,
             Downsamples[0],
             kernel_size=16,
             dilation=2,
@@ -268,6 +275,7 @@ class Net(nn.Module):
 
         self.downsamples = nn.ModuleList([ DownLayer(num_groups=num_groups, dropout_prob=dropout_prob, C=channels, num_heads=num_heads) for channels in Downsamples])
         self.upsamples = nn.ModuleList([ UpLayer(num_groups=num_groups, dropout_prob=dropout_prob, C=channels, num_heads=num_heads) for channels in Upsamples])
+        self.attentions = nn.ModuleList([AttentionLayer(num_groups=num_groups, dropout_prob=dropout_prob, C=Upsamples[0], num_heads=num_heads) for _ in range(num_attention)])
 
         out_channels = Upsamples[-1] // 2
 
@@ -281,8 +289,12 @@ class Net(nn.Module):
     def forward(self, data, mask):
         mask = mask.float()
 
-        discrete = self.discrete_embeddings(data[:, 1, :, :].long())
+        # Generate a one hot encoding of our class and then express it as [B; C; H; W]
+        discrete = one_hot(data[:, 1, :, :].long(), num_classes=3)
+        discrete = discrete.permute(0, 3, 1, 2)
+
         origin = data[:,0:1,:,:]
+        origin_mask = mask
         coords = self.coords(data)
 
         data = cat([origin, discrete, coords], dim=1)
@@ -303,6 +315,9 @@ class Net(nn.Module):
             residuals.append(residual)
             residual_masks.append(residual_mask)
 
+        for layer in self.attentions:
+            data, mask = layer(data, mask)
+
         for i, layer in enumerate(self.upsamples):
             #for residual in residuals:
             #    print("RS", residual.shape)
@@ -316,7 +331,9 @@ class Net(nn.Module):
 
         data, mask = self.late_conv(data, mask)
         data = self.relu(data)
+
         data, mask = self.output_conv(data, mask)
         data = self.relu(data)
 
-        return origin + data
+        # By adding the residual only for the masked cells we avoid forcing the model to predict zeros for the valid cells.
+        return origin + (data * (1 - origin_mask))

@@ -1,5 +1,5 @@
 import torch
-from torch import clamp, no_grad, save, nn
+from torch import clamp, no_grad, save, nn, logical_not
 from torch.optim import Adam
 from .unet import Net
 from pytorch_msssim import ssim
@@ -46,9 +46,15 @@ class Model:
         data = data * mask
         inferred = self.model.forward(data, mask)
 
+        # We only want to predict errors around the regions we aimed to fill in
+        training_target_mask = expected_good_mask * logical_not(mask) 
         huber_loss = self.huber(inferred, expected)
-        huber_loss = huber_loss * expected_good_mask # We should not backprop the loss from the regions that were not known in the original input
-        huber_loss = huber_loss.sum() / (mask.sum() + 1e-8)
+
+        # We should not backprop the loss from the regions that were not known in the original input
+        huber_loss = huber_loss * training_target_mask 
+
+        # Manually take the mean, accounting for missing pixels
+        huber_loss = huber_loss.sum() / (training_target_mask.sum() + 1e-8)
 
         #ssim_loss = 1 - ssim(
         #    clamp(inferred, min=0, max=1) * expected_good_mask,
