@@ -165,8 +165,8 @@ class ResBlock(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.norm1 = MaskedInstanceNorm2d(C, affine=True)
         self.norm2 = MaskedInstanceNorm2d(C, affine=True)
-        self.conv1 = PartialConv2d(C, C, kernel_size=3, dilation=2, padding=2)
-        self.conv2 = PartialConv2d(C, C, kernel_size=3, dilation=2, padding=2)
+        self.conv1 = PartialConv2d(C, C, kernel_size=3, dilation=1, padding=1)
+        self.conv2 = PartialConv2d(C, C, kernel_size=3, dilation=1, padding=1)
         self.dropout = nn.Dropout(p=dropout_prob, inplace=True)
 
     def forward(self, inp, mask):
@@ -268,9 +268,9 @@ class Net(nn.Module):
         self.shallow_conv = PartialConv2d(
             1 + 3 + 2,
             Downsamples[0],
-            kernel_size=16,
-            dilation=2,
-            padding=15,
+            kernel_size=7,
+            dilation=1,
+            padding=3,
         )
 
         self.downsamples = nn.ModuleList([ DownLayer(num_groups=num_groups, dropout_prob=dropout_prob, C=channels, num_heads=num_heads) for channels in Downsamples])
