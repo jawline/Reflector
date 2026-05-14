@@ -27,7 +27,7 @@ def train(
     train_loader = dataloader(dataset, batch_size)
 
     scheduler = ReduceLROnPlateau(
-        model.optimizer, mode="min", patience=0, factor=0.1, threshold=0.001
+        model.optimizer, mode="min", patience=0, factor=0.1
     )
 
     for i in range(num_epochs):

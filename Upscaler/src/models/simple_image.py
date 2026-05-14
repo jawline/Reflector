@@ -3,6 +3,7 @@ from torch import clamp, no_grad, save, nn, logical_not
 from torch.optim import Adam
 from .unet import Net
 from pytorch_msssim import ssim
+from monai.losses import SSIMLoss, MaskedLoss
 
 
 class Model:
@@ -11,6 +12,7 @@ class Model:
         self.model = Net().to(device)
         self.optimizer = Adam(self.model.parameters(), lr=lr)
         self.huber = nn.HuberLoss(reduction="none")
+        self.ssim = MaskedLoss(loss=SSIMLoss(spatial_dims=2, data_range=1.0, reduction="none"))
 
     def load(self, file, device=None):
         try:
@@ -56,14 +58,14 @@ class Model:
         # Manually take the mean, accounting for missing pixels
         huber_loss = huber_loss.sum() / (training_target_mask.sum() + 1e-8)
 
-        #ssim_loss = 1 - ssim(
-        #    clamp(inferred, min=0, max=1) * expected_good_mask,
-        #    clamp(expected, min=0, max=1) * expected_good_mask,
-        #    data_range=1.0,
-        #    size_average=True,
-        #)
+        # SSIM loss against the entire ground truth, ignore pixels we did not know about.
+        ssim_loss = self.ssim(
+            inferred,
+            expected,
+            mask=expected_good_mask,
+        ).sum() / (expected_good_mask.sum() + 1e-8)
 
-        loss = (huber_loss * 1) #+ (ssim_loss * 0.2)
+        loss = (huber_loss * 0.6) + (ssim_loss * 0.4)
 
         loss.backward()
 
