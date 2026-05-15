@@ -1,5 +1,5 @@
 from torch import (
-        exp,
+    exp,
     sin,
     cos,
     nn,
@@ -8,24 +8,21 @@ from torch import (
     clamp,
     no_grad,
     ones,
-    ones_like,
     zeros,
     sqrt,
-    max,
     concat,
-    arange
+    arange,
 )
 from torch.nn.functional import (
     scaled_dot_product_attention,
-    conv2d,
     conv_transpose2d,
     conv2d,
     pad,
     one_hot,
 )
 from einops import rearrange
-from .embeddings import ContinuousEmbedding, DiscreteEmbedding
 from math import log
+
 
 class SinusoidalEmbeddings(nn.Module):
     def __init__(self, time_steps: int, embed_dim: int):
@@ -399,7 +396,6 @@ class Net(nn.Module):
         discrete = discrete.permute(0, 3, 1, 2)
 
         origin = data[:, 0:num_non_classification_channels, :, :]
-        origin_mask = mask
         coords = self.coords(data)
 
         data = cat([origin, discrete, coords], dim=1)

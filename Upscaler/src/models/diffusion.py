@@ -17,7 +17,9 @@ class Model:
         self.alpha_bar = torch.cumprod(self.alpha, dim=0)
 
         # Model
-        self.model = WithSinusoidalEmbedding(input_channels=3, time_steps=self.total_timesteps).to(device)
+        self.model = WithSinusoidalEmbedding(
+            input_channels=3, time_steps=self.total_timesteps
+        ).to(device)
         self.optimizer = Adam(self.model.parameters(), lr=lr)
         self.loss = nn.HuberLoss(reduction="none")
 
@@ -49,7 +51,7 @@ class Model:
 
         # 1. Isolate and normalize known conditioning channels
         data_masked = data * mask
-        data_heights = ((data_masked[:, 0:1, :, :] * 2) - 1) 
+        data_heights = (data_masked[:, 0:1, :, :] * 2) - 1
         data_class = data_masked[:, 1:2, :, :]
 
         # 2. Initialize x_T as pure Gaussian noise matching height dimensions
@@ -60,7 +62,7 @@ class Model:
         alphas = self.alpha.to(device)
         betas = self.beta.to(device)
 
-        images = [ data_masked[0][0].detach().to("cpu")]
+        images = [data_masked[0][0].detach().to("cpu")]
 
         # 3. Reverse Diffusion Loop: Step from T-1 down to 0
         for t in tqdm(reversed(range(self.total_timesteps)), position=2):
@@ -105,7 +107,7 @@ class Model:
 
         images.append(denoised_output.detach().to("cpu"))
 
-        display_images(images, to_file="./infer.png")
+        display_images(images, to_file="./infer")
 
         self.model.train()
         return denoised_output
@@ -119,8 +121,8 @@ class Model:
         data_class = data[:, 1:2, :, :]
 
         # Normalize our data
-        data_heights = ((data_heights * 2) - 1)  
-        expected = ((expected * 2) - 1)  
+        data_heights = (data_heights * 2) - 1
+        expected = (expected * 2) - 1
 
         # Random timestep for each element in the brach
         batch_size = data.shape[0]
@@ -140,13 +142,12 @@ class Model:
         )
 
         # combine the noised input with the masked input, order matters here (class must come last) as we onehot them in the model
-        model_input = cat(
-            [noised_target_channel, data_heights, data_class], dim=1
-        )
+        model_input = cat([noised_target_channel, data_heights, data_class], dim=1)
 
         # Inference, we still pass in the expected good mask so that truly
         # unknown pixels during training do not influence nearby pixels
         inferred_noise = self.model.forward(model_input, expected_good_mask, timestep)
+
 
         # Loss
         # We only care about loss in the regions we have masked but that were known good in the training input
@@ -162,5 +163,16 @@ class Model:
         denoised_target = (
             noised_target_channel - torch.sqrt(1.0 - alpha_bar_t) * inferred_noise
         ) / torch.sqrt(alpha_bar_t)
+
+        display_images(
+            [
+                model_input[0][0].detach().to("cpu"),
+                model_input[0][1].detach().to("cpu"),
+                model_input[0][2].detach().to("cpu"),
+                active_learning_region.detach().to("cpu"),
+                denoised_target
+            ],
+            to_file="./train",
+        )
 
         return (denoised_target + 1) / 2, loss
