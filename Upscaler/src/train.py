@@ -26,9 +26,7 @@ def train(
     dataset_per_epoch = dataset_len / batch_size
     train_loader = dataloader(dataset, batch_size)
 
-    scheduler = ReduceLROnPlateau(
-        model.optimizer, mode="min", patience=0, factor=0.1
-    )
+    scheduler = ReduceLROnPlateau(model.optimizer, mode="min", patience=0, factor=0.1)
 
     for i in range(num_epochs):
 
@@ -41,11 +39,13 @@ def train(
             tqdm(train_loader, desc=f"Epoch {i + 1}/{num_epochs}")
         ):
             model.optimizer.zero_grad(set_to_none=True)
+
             for_train = (
                 datapoint["terrain_with_classification"]
                 .to(device, non_blocking=True)
                 .squeeze(1)
             )
+
             mask = datapoint["mask"].to(device, non_blocking=True).squeeze(1)
 
             # print(for_train.shape, mask.shape)
@@ -86,7 +86,7 @@ def train(
 
             reconstructed = (for_train * mask) + (logical_not(mask) * output)
 
-            if (bidx % int(dataset_per_epoch // 100)) == 0:
+            if (bidx % int(dataset_per_epoch // 50)) == 0:
                 print(
                     "Sample",
                     bidx,
@@ -96,33 +96,25 @@ def train(
 
                 model.checkpoint(checkpoint_path)
 
-                for elt in range(0, for_train.shape[0]):
-                    dec_for_train = for_train.to("cpu")[elt][0].detach()
-                    dec_clas_train = for_train.to("cpu")[elt][1].detach()
-                    dec_for_autoencoder = for_autoencoder.to("cpu")[elt][0].detach()
-                    dec_decoded = output.to("cpu")[elt][0].detach()
-                    dec_mask = mask.to("cpu")[elt][0].detach()
-                    dec_reconstructed = reconstructed.to("cpu")[elt][0].detach()
-                    dec_clas_reconstructed = reconstructed.to("cpu")[elt][1].detach()
-                    display_images(
-                        [
-                            dec_for_train,
-                            dec_clas_train,
-                            dec_mask,
-                            dec_for_autoencoder,
-                            dec_decoded,
-                            dec_reconstructed,
-                            dec_clas_reconstructed,
-                        ],
-                        to_file=elt,
-                    )
+                elt = 0
+
+                test_data = for_autoencoder[elt : elt + 1].to(device)
+                test_mask = total_mask[elt : elt + 1].to(device)
+                test = model.infer(test_data, test_mask).to("cpu").detach()
+
+                display_images(
+                    [
+                        test_data.to("cpu")[0][0].detach(),
+                        test_mask.to("cpu")[0][0].detach(),
+                        test,
+                    ],
+                    to_file=elt,
+                )
 
         avg_loss = total_loss / dataset_per_epoch
         scheduler.step(avg_loss)
 
-        print(
-            f"Epoch {i + 1} | Loss {total_loss / (dataset_len / batch_size)} (Saved)"
-        )
+        print(f"Epoch {i + 1} | Loss {total_loss / (dataset_len / batch_size)} (Saved)")
 
         if total_loss < 0:
             raise Exception("Explosion - self terminating")

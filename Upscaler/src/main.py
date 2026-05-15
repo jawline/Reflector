@@ -10,7 +10,7 @@ from infer import (
 )
 from tiled_inference import whole_datasource_tiled_inference
 from constants import tile_size
-from models.simple_image import Model as SimpleModel
+from models.diffusion import Model as SimpleModel
 import preprocess
 
 

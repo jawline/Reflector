@@ -1,8 +1,7 @@
 import torch
-from torch import clamp, no_grad, save, nn, logical_not
+from torch import no_grad, save, nn, logical_not
 from torch.optim import Adam
 from .unet import Net
-from pytorch_msssim import ssim
 from monai.losses import SSIMLoss, MaskedLoss
 
 
@@ -12,7 +11,9 @@ class Model:
         self.model = Net().to(device)
         self.optimizer = Adam(self.model.parameters(), lr=lr)
         self.huber = nn.HuberLoss(reduction="none")
-        self.ssim = MaskedLoss(loss=SSIMLoss(spatial_dims=2, data_range=1.0, reduction="none"))
+        self.ssim = MaskedLoss(
+            loss=SSIMLoss(spatial_dims=2, data_range=1.0, reduction="none")
+        )
 
     def load(self, file, device=None):
         try:
@@ -36,24 +37,29 @@ class Model:
         save(checkpoint, checkpoint_path)
         print("Saved checkpoint to", checkpoint_path)
 
+    def forward(self, data, mask):
+        # We only care about the model learning the masked region
+        return data + ((1 - mask) * self.model.forward(data, mask))
+
     def infer(self, src_frame, src_mask, device=None):
 
         with no_grad():
-            forward = self.model.forward((src_frame * src_mask))
+            forward = self.forward(src_frame, src_mask)
 
         return forward
 
     def train_step(self, data, mask, expected, expected_good_mask, device=None):
         self.optimizer.zero_grad(set_to_none=True)
+
         data = data * mask
-        inferred = self.model.forward(data, mask)
+        inferred = self.forward(data, mask)
 
         # We only want to predict errors around the regions we aimed to fill in
-        training_target_mask = expected_good_mask * logical_not(mask) 
+        training_target_mask = expected_good_mask * logical_not(mask)
         huber_loss = self.huber(inferred, expected)
 
         # We should not backprop the loss from the regions that were not known in the original input
-        huber_loss = huber_loss * training_target_mask 
+        huber_loss = huber_loss * training_target_mask
 
         # Manually take the mean, accounting for missing pixels
         huber_loss = huber_loss.sum() / (training_target_mask.sum() + 1e-8)
