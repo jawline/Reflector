@@ -10,7 +10,6 @@ from torch import (
     ones,
     zeros,
     sqrt,
-    concat,
     arange,
 )
 from torch.nn.functional import (
@@ -220,7 +219,7 @@ class MaskedInstanceNorm2d(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, C: int, num_groups: int, dropout_prob: float):
+    def __init__(self, C: int, dropout_prob: float):
         super().__init__()
         self.relu = nn.ReLU(inplace=True)
         self.norm1 = MaskedInstanceNorm2d(C, affine=True)
@@ -257,7 +256,7 @@ class DownLayer(nn.Module):
     ):
         super().__init__()
         self.relu = nn.ReLU(inplace=True)
-        self.r = ResBlock(C=C, num_groups=num_groups, dropout_prob=dropout_prob)
+        self.r = ResBlock(C=C, dropout_prob=dropout_prob)
         self.conv = PartialConv2d(C, C * 2, kernel_size=3, stride=2, padding=1)
 
     def forward(self, x, mask):
@@ -422,8 +421,8 @@ class Net(nn.Module):
             if i > 0:
                 residual = residuals.pop()
                 residual_mask = residual_masks.pop()
-                data = concat((data, residual), dim=1)
-                mask = concat((mask, residual_mask), dim=1)
+                data = cat((data, residual), dim=1)
+                mask = cat((mask, residual_mask), dim=1)
             data, mask = layer(data, mask)
 
         data, mask = self.late_conv(data, mask)
