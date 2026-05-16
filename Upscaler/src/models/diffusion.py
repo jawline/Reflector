@@ -189,6 +189,7 @@ class Model:
 
         loss.backward()
 
+        nn.utils.clip_grad_norm(self.model.parameters(), 1.0)
         self.optimizer.step()
         self.ema_update()
 
