@@ -17,7 +17,6 @@ def train(
     batch_size: int = 8,
     num_epochs: int = 150,
     seed: int = -1,
-    ema_decay: float = 0.9999,
     checkpoint_path: str = None,
     device=None,
 ):
@@ -38,8 +37,6 @@ def train(
         for bidx, datapoint in enumerate(
             tqdm(train_loader, desc=f"Epoch {i + 1}/{num_epochs}")
         ):
-            model.optimizer.zero_grad(set_to_none=True)
-
             for_train = (
                 datapoint["terrain_with_classification"]
                 .to(device, non_blocking=True)
@@ -79,12 +76,10 @@ def train(
             total_mask = logical_and(batch_noise, additional_noise)
             for_autoencoder = for_train * total_mask
 
-            output, loss = model.train_step(
+            loss = model.train_step(
                 for_autoencoder, total_mask, for_train[:, 0:1, :, :], mask
             )
             total_loss += loss.item()
-
-            reconstructed = (for_train * mask) + (logical_not(mask) * output)
 
             if (bidx % int(dataset_per_epoch // 50)) == 0:
                 print(

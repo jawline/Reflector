@@ -12,9 +12,14 @@ class Model:
 
         # Scheduling
         self.total_timesteps = 1000
-        self.beta = torch.linspace(1e-4, 0.02, self.total_timesteps).to(device)
-        self.alpha = 1.0 - self.beta
-        self.alpha_bar = torch.cumprod(self.alpha, dim=0)
+        s = 0.008
+        steps = self.total_timesteps
+        t = torch.linspace(0, steps, steps + 1, device=device)
+        f = torch.cos((t / steps + s) / (1 + s) * torch.pi / 2) ** 2
+        alpha_bar_cosine = f / f[0]
+        self.beta = torch.clamp(1 - alpha_bar_cosine[1:] / alpha_bar_cosine[:-1], max=0.999).to(device)
+        self.alpha = (1.0 - self.beta).to(device)
+        self.alpha_bar = alpha_bar_cosine[1:].to(device)
 
         # Model
         self.model = WithSinusoidalEmbedding(
@@ -79,9 +84,9 @@ class Model:
         batch_size = data.shape[0]
         x_t = randn_like(data_heights, device=device)
 
-        alpha_bar = self.alpha_bar.to(device)
-        alphas = self.alpha.to(device)
-        betas = self.beta.to(device)
+        alpha_bar = self.alpha_bar
+        alphas = self.alpha
+        betas = self.beta
 
         images = [data_masked[0][0].detach().to("cpu")]
 
@@ -145,10 +150,8 @@ class Model:
             for ema_p, model_p in zip(self.ema_model.parameters(), self.model.parameters()):
                 ema_p.data.mul_(self.ema_decay).add_(model_p.data, alpha=(1 - self.ema_decay))
 
-    def train_step(self, data, mask, expected, expected_good_mask, device=None):
+    def train_step(self, data, mask, expected, expected_good_mask):
         self.optimizer.zero_grad(set_to_none=True)
-
-        data = data * mask
 
         data_heights = data[:, 0:1, :, :]
         data_class = data[:, 1:2, :, :]
@@ -166,7 +169,7 @@ class Model:
         # Random timestep for each element in the brach
         batch_size = data.shape[0]
         timestep = torch.randint(
-            0, self.total_timesteps, (batch_size,), device=device
+            0, self.total_timesteps, (batch_size,), device=data.device
         ).long()
 
         # Noised mask 
@@ -189,13 +192,13 @@ class Model:
 
         loss.backward()
 
-        nn.utils.clip_grad_norm(self.model.parameters(), 1.0)
+        nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
         self.optimizer.step()
         self.ema_update()
 
-        denoised_target = (
-            noised_target_channel - torch.sqrt(1.0 - alpha_bar_t) * inferred_noise
-        ) / torch.sqrt(alpha_bar_t)
+        #denoised_target = (
+        #    noised_target_channel - torch.sqrt(1.0 - alpha_bar_t) * inferred_noise
+        #) / torch.sqrt(alpha_bar_t)
 
         #display_images(
         #    [
@@ -212,4 +215,4 @@ class Model:
         #    to_file="./train",
         #)
 
-        return (denoised_target + 1) / 2, loss
+        return loss
