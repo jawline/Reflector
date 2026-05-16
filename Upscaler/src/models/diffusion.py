@@ -20,6 +20,16 @@ class Model:
         self.model = WithSinusoidalEmbedding(
             input_channels=3, time_steps=self.total_timesteps
         ).to(device)
+
+        # EMA model (we average the weights over time)
+        # This is supposed to avoid falling into a local minima
+        self.ema_model = WithSinusoidalEmbedding(
+            input_channels=3, time_steps=self.total_timesteps
+        ).to(device)
+
+        self.ema_model.load_state_dict(self.model.state_dict())
+        self.ema_decay = 0.999
+
         self.optimizer = Adam(self.model.parameters(), lr=lr)
         self.loss = nn.HuberLoss(reduction="none")
 
@@ -31,30 +41,41 @@ class Model:
                 print("Loaded checkpoint")
                 self.model.load_state_dict(checkpoint["model"])
                 print("Loaded model")
+                self.ema_model.load_state_dict(checkpoint["ema_model"])
+                print("Loaded EMA model")
                 self.optimizer.load_state_dict(checkpoint["optimizer"])
                 print("Loaded all")
         except Exception as e:
             print("Could not load checkpoint", e)
 
     def checkpoint(self, checkpoint_path):
+
         checkpoint = {
             "model": self.model.state_dict(),
+            "ema_model": self.ema_model.state_dict(),
             "optimizer": self.optimizer.state_dict(),
         }
+
         print("Saving checkpoint to", checkpoint_path)
+
         save(checkpoint, checkpoint_path)
+
         print("Saved checkpoint to", checkpoint_path)
+
+    def noise_input_at_step(self, i, t):
+        noise = torch.randn_like(i)
+        alpha_bar_t = self.alpha_bar[t].view(-1, 1, 1, 1)
+        return (torch.sqrt(alpha_bar_t) * i) + (torch.sqrt(1.0 - alpha_bar_t) * noise), noise
 
     @torch.no_grad()
     def infer(self, data, mask, device=None):
-        self.model.eval()
+        self.ema_model.eval()
 
-        # 1. Isolate and normalize known conditioning channels
         data_masked = data * mask
         data_heights = (data_masked[:, 0:1, :, :] * 2) - 1
         data_class = data_masked[:, 1:2, :, :]
 
-        # 2. Initialize x_T as pure Gaussian noise matching height dimensions
+        # x_t initialized as pure random (-1,1)
         batch_size = data.shape[0]
         x_t = randn_like(data_heights, device=device)
 
@@ -67,18 +88,25 @@ class Model:
         # 3. Reverse Diffusion Loop: Step from T-1 down to 0
         for t in tqdm(reversed(range(self.total_timesteps)), position=2):
 
-            if t % 100 == 0:
-                image = x_t.to("cpu").detach()[0]
-                images.append(image)
+            # Uncomment to display partial inference
+            #if t % 100 == 0:
+            #    image = x_t.to("cpu").detach()[0]
+            #    images.append((image + 1) / 2)
 
             # Create a batch-wide timestep tensor
             t_tensor = torch.full((batch_size,), t, device=device, dtype=torch.long)
+
+            # Nosied input
+            noised_input, _noise_added = self.noise_input_at_step(data_heights, t_tensor)
+
+            # Incorporate noised origin back into our output
+            x_t = (mask * noised_input) + (logical_not(mask) * x_t)
 
             # Reconstruct model input matching your train_step order
             model_input = cat([x_t, data_heights, data_class], dim=1)
 
             # Predict noise via the model forward pass
-            inferred_noise = self.model.forward(model_input, ones_like(mask), t_tensor)
+            inferred_noise = self.ema_model.forward(model_input, ones_like(mask), t_tensor)
 
             # Extract scalar coefficients for step t
             alpha_t = alphas[t].view(-1, 1, 1, 1)
@@ -109,8 +137,13 @@ class Model:
 
         display_images(images, to_file="./infer")
 
-        self.model.train()
+        self.ema_model.train()
         return denoised_output
+
+    def ema_update(self):
+        with torch.no_grad():
+            for ema_p, model_p in zip(self.ema_model.parameters(), self.model.parameters()):
+                ema_p.data.mul_(self.ema_decay).add_(model_p.data, alpha=(1 - self.ema_decay))
 
     def train_step(self, data, mask, expected, expected_good_mask, device=None):
         self.optimizer.zero_grad(set_to_none=True)
@@ -119,6 +152,12 @@ class Model:
 
         data_heights = data[:, 0:1, :, :]
         data_class = data[:, 1:2, :, :]
+        
+        # TODO: Think about whether this helps
+        # Randomly with some probability drop our classes so the model learns
+        # to handle classless data with classes as supplemental 
+        # 1% probability
+        data_class = data_class * (torch.rand_like(data_class) > 0.01)
 
         # Normalize our data
         data_heights = (data_heights * 2) - 1
@@ -130,16 +169,9 @@ class Model:
             0, self.total_timesteps, (batch_size,), device=device
         ).long()
 
-        # Noise to add to the heights on a separate channel
-        noise = torch.randn_like(data_heights)
-
-        # We noise the expected outcome since the model is learning to predict
-        # the difference from the noise at this step and the expected outcome
-        # given the rest of the data.
+        # Noised mask 
         alpha_bar_t = self.alpha_bar[timestep].view(-1, 1, 1, 1)
-        noised_target_channel = (
-            torch.sqrt(alpha_bar_t) * expected + torch.sqrt(1.0 - alpha_bar_t) * noise
-        )
+        noised_target_channel, noise_added = self.noise_input_at_step(expected, timestep)
 
         # combine the noised input with the masked input, order matters here (class must come last) as we onehot them in the model
         model_input = cat([noised_target_channel, data_heights, data_class], dim=1)
@@ -148,31 +180,35 @@ class Model:
         # unknown pixels during training do not influence nearby pixels
         inferred_noise = self.model.forward(model_input, expected_good_mask, timestep)
 
-
         # Loss
         # We only care about loss in the regions we have masked but that were known good in the training input
-        active_learning_region = (expected_good_mask * logical_not(mask)).float()
+        active_learning_region = (expected_good_mask * logical_not(mask))
 
-        loss = self.loss(inferred_noise, noise) * active_learning_region
+        loss = self.loss(inferred_noise, noise_added) * active_learning_region
         loss = loss.sum() / (active_learning_region.sum() + 1e-8)
 
         loss.backward()
 
         self.optimizer.step()
+        self.ema_update()
 
         denoised_target = (
             noised_target_channel - torch.sqrt(1.0 - alpha_bar_t) * inferred_noise
         ) / torch.sqrt(alpha_bar_t)
 
-        display_images(
-            [
-                model_input[0][0].detach().to("cpu"),
-                model_input[0][1].detach().to("cpu"),
-                model_input[0][2].detach().to("cpu"),
-                active_learning_region.detach().to("cpu"),
-                denoised_target
-            ],
-            to_file="./train",
-        )
+        #display_images(
+        #    [
+        #        model_input[0][0].detach().to("cpu"),
+        #        model_input[0][1].detach().to("cpu"),
+        #        model_input[0][2].detach().to("cpu"),
+        #        expected_good_mask[0][0].to("cpu").detach(),
+        #        active_learning_region[0][0].to("cpu").detach(),
+        #        noise_added[0][0].to("cpu").detach(),
+        #        inferred_noise[0][0].to("cpu").detach(),
+        #        denoised_target[0][0].detach().to("cpu"),
+        #        expected[0][0].detach().to("cpu")
+        #    ],
+        #    to_file="./train",
+        #)
 
         return (denoised_target + 1) / 2, loss

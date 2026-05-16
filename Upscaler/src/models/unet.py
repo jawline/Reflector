@@ -70,7 +70,7 @@ class Attention(nn.Module):
             q,
             k,
             v,
-            attn_mask=m,  # Apply the flattened mask
+            attn_mask=(m > 0.5),  # Apply the flattened mask
             is_causal=False,
             dropout_p=self.dropout_prob if self.training else 0,
         )
@@ -430,7 +430,6 @@ class Net(nn.Module):
         data = self.relu(data)
 
         data, mask = self.output_conv(data, mask)
-        data = self.relu(data)
 
         return data
 
@@ -455,10 +454,10 @@ class WithSinusoidalEmbedding(Net):
             num_groups=num_groups,
             dropout_prob=dropout_prob,
             num_heads=num_heads,
-            input_channels=input_channels + 2,
+            input_channels=input_channels + 128,
             output_channels=output_channels,
         )
-        self.embed = SinusoidalEmbeddings(time_steps, embed_dim=2)
+        self.embed = SinusoidalEmbeddings(time_steps, embed_dim=128)
 
     def forward(self, data, mask, t):
         embed = self.embed.forward(t).expand(-1, -1, data.shape[2], data.shape[3])
