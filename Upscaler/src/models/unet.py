@@ -249,7 +249,6 @@ class DownLayer(nn.Module):
 
     def __init__(
         self,
-        num_groups: int,
         dropout_prob: float,
         num_heads: int,
         C: int,
@@ -270,14 +269,13 @@ class UpLayer(nn.Module):
 
     def __init__(
         self,
-        num_groups: int,
         dropout_prob: float,
         num_heads: int,
         C: int,
     ):
         super().__init__()
         self.relu = nn.ReLU(inplace=True)
-        self.r = ResBlock(C=C // 2, num_groups=num_groups, dropout_prob=dropout_prob)
+        self.r = ResBlock(C=C // 2, dropout_prob=dropout_prob)
         self.conv = PartialConvTranspose2d(
             C, C // 2, kernel_size=4, stride=2, padding=1
         )
@@ -293,7 +291,6 @@ class AttentionLayer(nn.Module):
 
     def __init__(
         self,
-        num_groups: int,
         dropout_prob: float,
         num_heads: int,
         C: int,
@@ -301,7 +298,7 @@ class AttentionLayer(nn.Module):
         super().__init__()
         self.relu = nn.ReLU(inplace=True)
         self.norm = MaskedInstanceNorm2d(C, affine=True)
-        self.r = ResBlock(C=C, num_groups=num_groups, dropout_prob=dropout_prob)
+        self.r = ResBlock(C=C, dropout_prob=dropout_prob)
         self.a = Attention(C=C, num_heads=num_heads, dropout_prob=dropout_prob)
 
     def forward(self, x, mask):
@@ -319,7 +316,6 @@ class Net(nn.Module):
         Downsamples=[16, 32, 64],
         Upsamples=[128, 128, 64 + 32],
         num_attention: int = 4,
-        num_groups: int = 16,
         dropout_prob: float = 0.01,
         num_heads: int = 8,
         input_channels: int = 2,
@@ -341,7 +337,6 @@ class Net(nn.Module):
         self.downsamples = nn.ModuleList(
             [
                 DownLayer(
-                    num_groups=num_groups,
                     dropout_prob=dropout_prob,
                     C=channels,
                     num_heads=num_heads,
@@ -352,7 +347,6 @@ class Net(nn.Module):
         self.upsamples = nn.ModuleList(
             [
                 UpLayer(
-                    num_groups=num_groups,
                     dropout_prob=dropout_prob,
                     C=channels,
                     num_heads=num_heads,
@@ -363,7 +357,6 @@ class Net(nn.Module):
         self.attentions = nn.ModuleList(
             [
                 AttentionLayer(
-                    num_groups=num_groups,
                     dropout_prob=dropout_prob,
                     C=Upsamples[0],
                     num_heads=num_heads,
@@ -439,7 +432,6 @@ class WithSinusoidalEmbedding(Net):
         Downsamples=[16, 32, 64],
         Upsamples=[128, 128, 64 + 32],
         num_attention: int = 4,
-        num_groups: int = 16,
         dropout_prob: float = 0.01,
         num_heads: int = 8,
         input_channels: int = 2,
@@ -450,7 +442,6 @@ class WithSinusoidalEmbedding(Net):
             Downsamples=Downsamples,
             Upsamples=Upsamples,
             num_attention=num_attention,
-            num_groups=num_groups,
             dropout_prob=dropout_prob,
             num_heads=num_heads,
             input_channels=input_channels + 128,

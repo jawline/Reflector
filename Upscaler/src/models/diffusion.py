@@ -187,32 +187,24 @@ class Model:
         # We only care about loss in the regions we have masked but that were known good in the training input
         active_learning_region = (expected_good_mask * logical_not(mask))
 
-        loss = self.loss(inferred_noise, noise_added) * active_learning_region
-        loss = loss.sum() / (active_learning_region.sum() + 1e-8)
+        noise_loss = self.loss(inferred_noise, noise_added) * active_learning_region
+        noise_loss = noise_loss.sum() / (active_learning_region.sum() + 1e-8)
+
+        # Auxiliary loss: predict the clean image from the estimated noise
+        # Gives the model a direct signal on the final output quality
+        reconstructed_image = (
+            noised_target_channel - torch.sqrt(1.0 - alpha_bar_t) * inferred_noise
+        ) / torch.sqrt(alpha_bar_t)
+
+        reconstructed_image_loss = self.loss(reconstructed_image, expected) * active_learning_region
+        reconstructed_image_loss = reconstructed_image_loss.sum() / (active_learning_region.sum() + 1e-8)
+
+        loss = noise_loss + reconstructed_image_loss * 0.1
 
         loss.backward()
 
         nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
         self.optimizer.step()
         self.ema_update()
-
-        #denoised_target = (
-        #    noised_target_channel - torch.sqrt(1.0 - alpha_bar_t) * inferred_noise
-        #) / torch.sqrt(alpha_bar_t)
-
-        #display_images(
-        #    [
-        #        model_input[0][0].detach().to("cpu"),
-        #        model_input[0][1].detach().to("cpu"),
-        #        model_input[0][2].detach().to("cpu"),
-        #        expected_good_mask[0][0].to("cpu").detach(),
-        #        active_learning_region[0][0].to("cpu").detach(),
-        #        noise_added[0][0].to("cpu").detach(),
-        #        inferred_noise[0][0].to("cpu").detach(),
-        #        denoised_target[0][0].detach().to("cpu"),
-        #        expected[0][0].detach().to("cpu")
-        #    ],
-        #    to_file="./train",
-        #)
 
         return loss
