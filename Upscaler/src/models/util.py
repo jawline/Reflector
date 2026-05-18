@@ -64,7 +64,7 @@ def apply_batch_noise(masks, count):
 
 
 def display_images(images, to_file=None):
-    fig, axes = plt.subplots(1, len(images), figsize=(10, 1))
+    fig, axes = plt.subplots(1, len(images), figsize=(len(images), 1))
     for i, ax in enumerate(axes.flat):
 
         x = images[i]

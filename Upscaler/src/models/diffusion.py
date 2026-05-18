@@ -73,7 +73,7 @@ class Model:
         return (torch.sqrt(alpha_bar_t) * i) + (torch.sqrt(1.0 - alpha_bar_t) * noise), noise
 
     @torch.no_grad()
-    def infer(self, data, mask, device=None):
+    def infer(self, data, mask, num_inference_steps=100, device=None):
         self.ema_model.eval()
 
         data_masked = data * mask
@@ -85,24 +85,24 @@ class Model:
         x_t = randn_like(data_heights, device=device)
 
         alpha_bar = self.alpha_bar
-        alphas = self.alpha
-        betas = self.beta
 
         images = [data_masked[0][0].detach().to("cpu")]
 
-        # 3. Reverse Diffusion Loop: Step from T-1 down to 0
-        for t in tqdm(reversed(range(self.total_timesteps)), position=2):
+        # Evenly spaced timesteps from T-1 down to 0
+        step_indices = torch.linspace(
+            self.total_timesteps - 1, 0, num_inference_steps, device=device
+        ).long()
 
-            # Uncomment to display partial inference
-            #if t % 100 == 0:
-            #    image = x_t.to("cpu").detach()[0]
-            #    images.append((image + 1) / 2)
+        # 3. Reverse Diffusion Loop with DDIM
+        for i in tqdm(range(len(step_indices) - 1), position=2):
+            t = step_indices[i].item()
+            t_prev = step_indices[i + 1].item()
 
             # Create a batch-wide timestep tensor
             t_tensor = torch.full((batch_size,), t, device=device, dtype=torch.long)
 
-            # Nosied input
-            noised_input, _noise_added = self.noise_input_at_step(data_heights, t_tensor)
+            # Noised input
+            noised_input, _ = self.noise_input_at_step(data_heights, t_tensor)
 
             # Incorporate noised origin back into our output
             x_t = (mask * noised_input) + (logical_not(mask) * x_t)
@@ -113,26 +113,16 @@ class Model:
             # Predict noise via the model forward pass
             inferred_noise = self.ema_model.forward(model_input, ones_like(mask), t_tensor)
 
-            # Extract scalar coefficients for step t
-            alpha_t = alphas[t].view(-1, 1, 1, 1)
-            beta_t = betas[t].view(-1, 1, 1, 1)
+            # DDIM deterministic update
             alpha_bar_t = alpha_bar[t].view(-1, 1, 1, 1)
+            alpha_bar_t_prev = alpha_bar[t_prev].view(-1, 1, 1, 1)
 
-            # Compute mean mu_t
-            noise_coef = beta_t / torch.sqrt(1.0 - alpha_bar_t)
-            mu_t = (1.0 / torch.sqrt(alpha_t)) * (x_t - noise_coef * inferred_noise)
+            # Predict the clean image from the estimated noise
+            x_0_pred = (x_t - torch.sqrt(1.0 - alpha_bar_t) * inferred_noise) / torch.sqrt(alpha_bar_t)
+            x_0_pred = torch.clamp(x_0_pred, -1.0, 1.0)
 
-            # Apply stochastic noise if we are not at the final step (t > 0)
-            if t > 0:
-                # Using the standard DDPM posterior variance choice
-                alpha_bar_t_prev = alpha_bar[t - 1]
-                sigma_t_squared = (
-                    (1.0 - alpha_bar_t_prev) / (1.0 - alpha_bar_t) * beta_t
-                )
-                z = torch.randn_like(x_t, device=device)
-                x_t = mu_t + torch.sqrt(sigma_t_squared) * z
-            else:
-                x_t = mu_t
+            # Jump directly to the previous timestep (deterministic, no noise added)
+            x_t = torch.sqrt(alpha_bar_t_prev) * x_0_pred + torch.sqrt(1.0 - alpha_bar_t_prev) * inferred_noise
 
         # 4. Invert normalization mapping back to [0, 1] range
         denoised_output = x_t
