@@ -69,9 +69,9 @@ class Model:
             inferred,
             expected,
             mask=expected_good_mask,
-        ).sum() / (expected_good_mask.sum() + 1e-8)
+        ).mean()
 
-        loss = (huber_loss * 0.6) + (ssim_loss * 0.4)
+        loss = (huber_loss * 0.8) + (ssim_loss * 0.2)
 
         loss.backward()
 

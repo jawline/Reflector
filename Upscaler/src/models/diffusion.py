@@ -2,6 +2,7 @@ import torch
 from torch import save, nn, logical_not, randn_like, ones_like, cat
 from torch.optim import Adam
 from .unet import WithSinusoidalEmbedding
+from monai.losses import SSIMLoss, MaskedLoss
 from tqdm import tqdm
 from .util import display_images
 
@@ -37,6 +38,9 @@ class Model:
 
         self.optimizer = Adam(self.model.parameters(), lr=lr)
         self.loss = nn.HuberLoss(reduction="none")
+        self.ssim = MaskedLoss(
+            loss=SSIMLoss(spatial_dims=2, data_range=2.0, reduction="none")
+        )
 
     def load(self, file, device=None):
         try:
@@ -189,7 +193,19 @@ class Model:
         reconstructed_image_loss = self.loss(reconstructed_image, expected) * active_learning_region
         reconstructed_image_loss = reconstructed_image_loss.sum() / (active_learning_region.sum() + 1e-8)
 
-        loss = noise_loss + reconstructed_image_loss * 0.1
+        # SSIM loss on the reconstructed image, weighted by signal retention
+        # At high noise (alpha_bar ≈ 0), the reconstruction is unreliable so SSIM contributes little
+        # At low noise (alpha_bar ≈ 1), the reconstruction is clean and SSIM guides structure
+        reconstructed_clamped = torch.clamp(reconstructed_image, -1.0, 1.0)
+        ssim_loss = self.ssim(
+            reconstructed_clamped, expected, mask=active_learning_region.float()
+        ).squeeze()
+        ssim_weight = alpha_bar_t.view(-1)
+        ssim_loss = (ssim_loss * ssim_weight).mean()
+
+        loss = noise_loss
+        loss += reconstructed_image_loss * 0.1
+        loss += ssim_loss * 0.05
 
         loss.backward()
 
