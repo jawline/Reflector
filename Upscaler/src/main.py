@@ -66,6 +66,10 @@ def main():
 
         print("Prepared", without_nan.shape, mask.shape)
 
+
+        model = SimpleModel(lr=1e-4, device=device)
+        model.load(checkpoint)
+
         # display_reverse([without_nan, mask])
 
         inferred_frame = whole_datasource_tiled_inference(
@@ -73,7 +77,7 @@ def main():
             mask,
             tile_size,
             device=device,
-            checkpoint_path=checkpoint,
+            model=model,
         )
 
         print(inferred_frame.shape)

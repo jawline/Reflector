@@ -168,17 +168,10 @@ def tiled_inference(src_frame, src_mask, src_keep, model, kernel_size, device):
 
             if need_to_do_inference:
                 print("Inferring tile", start_x, start_y, tile_data.shape)
-
-                # TODO: The model has overfitted on seeing some noise so this is necessary to produce sane outputs. Remove the rand in training
-                additional_tile_mask = logical_and(
-                    tile_mask, rand_like(tile_data) > 0.02
-                )
-                additional_tile_data = (tile_data * additional_tile_mask) + (
-                    -1 * logical_not(additional_tile_mask)
-                )
+                print(tile_data.shape, tile_mask.shape)
 
                 inference = model.infer(
-                    additional_tile_data, additional_tile_mask, device=device
+                    tile_data, tile_mask, device=device
                 )
                 # display_reverse(
                 #    [
@@ -247,7 +240,6 @@ def tiled_inference(src_frame, src_mask, src_keep, model, kernel_size, device):
                 display_reverse(
                     [
                         tile_data.to("cpu")[:, 0:1, :, :],
-                        additional_tile_data.to("cpu")[:, 0:1, :, :],
                         tile_mask.to("cpu"),
                         inference.to("cpu")[:, 0:1, :, :],
                         tile_keep.to("cpu"),
