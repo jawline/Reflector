@@ -8,7 +8,7 @@ from infer import (
     masked_inference,
     generative_inference,
 )
-from tiled_inference import whole_datasource_tiled_inference
+from tiled_inference import whole_datasource_simple_grid_inference
 from constants import tile_size
 from models.diffusion import Model as SimpleModel
 import preprocess
@@ -72,7 +72,7 @@ def main():
 
         # display_reverse([without_nan, mask])
 
-        inferred_frame = whole_datasource_tiled_inference(
+        inferred_frame = whole_datasource_simple_grid_inference(
             without_nan,
             mask,
             tile_size,

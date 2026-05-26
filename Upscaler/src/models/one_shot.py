@@ -39,7 +39,9 @@ class Model:
 
     def forward(self, data, mask):
         # We only care about the model learning the masked region
-        return data + ((1 - mask) * self.model.forward(data, mask))
+        inference = self.model.forward(data, mask)[:,0:1,:,:]
+        data = data[:,0:1,:,:]
+        return data + (~mask * inference)
 
     def infer(self, src_frame, src_mask, device=None):
 

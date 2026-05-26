@@ -77,7 +77,7 @@ class Model:
         return (torch.sqrt(alpha_bar_t) * i) + (torch.sqrt(1.0 - alpha_bar_t) * noise), noise
 
     @torch.no_grad()
-    def infer(self, data, mask, num_inference_steps=100, device=None):
+    def infer(self, data, mask, num_inference_steps=200, device=None):
         self.ema_model.eval()
 
         data_masked = data * mask
@@ -90,7 +90,7 @@ class Model:
 
         alpha_bar = self.alpha_bar
 
-        images = [data_masked[0][0].detach().to("cpu")]
+        #images = [data_masked[0][0].detach().to("cpu")]
 
         # Evenly spaced timesteps from T-1 down to 0
         step_indices = torch.linspace(
@@ -132,9 +132,9 @@ class Model:
         denoised_output = x_t
         denoised_output = (denoised_output + 1) / 2
 
-        images.append(denoised_output.detach().to("cpu"))
+        #images.append(denoised_output.detach().to("cpu"))
 
-        display_images(images, to_file="./infer")
+        #display_images(images, to_file="./infer")
 
         self.ema_model.train()
         return denoised_output
