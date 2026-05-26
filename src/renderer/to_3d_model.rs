@@ -1,8 +1,8 @@
 use super::{bag_of_cubes, climbing_spires, marching_cubes, terrain, types::Model};
 use crate::las_converter::heightmap::Heightmap;
-use clap::{Parser, ValueEnum};
+use clap::ValueEnum;
 
-#[derive(PartialEq, Parser, Eq, Debug, Clone, Copy, ValueEnum, Default)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, ValueEnum, Default)]
 #[clap(rename_all = "kebab-case")]
 pub enum Mode {
     Terrain,

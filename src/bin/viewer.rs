@@ -19,12 +19,18 @@ use serde_pickle::DeOptions;
 use std::f32::consts::PI;
 use std::fs::read;
 
-use rust_las_printer::{las_converter::heightmap::Heightmap, renderer::to_3d_model};
+use rust_las_printer::{
+    las_converter::heightmap::{Heightmap, HeightmapAndClassification},
+    renderer::to_3d_model,
+};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     input_path: String,
+
+    #[arg(long)]
+    with_classifications: bool,
 
     #[arg(short, long)]
     mode: to_3d_model::Mode,
@@ -71,8 +77,13 @@ fn setup(
     let args = Args::parse();
 
     let heightmap = read(&args.input_path).unwrap();
-    let heightmap: Heightmap<Option<f32>> =
-        serde_pickle::from_slice(&heightmap, DeOptions::new()).unwrap();
+    let heightmap: Heightmap<Option<f32>> = if args.with_classifications {
+        let with_class: HeightmapAndClassification =
+            serde_pickle::from_slice(&heightmap, DeOptions::new()).unwrap();
+        with_class.heightmap
+    } else {
+        serde_pickle::from_slice(&heightmap, DeOptions::new()).unwrap()
+    };
     let heightmap = heightmap.fill_none_with_zero_and_add_base(0.0, 0.1); // TODO: Renormalize
     let mesh = heightmap_to_mesh_and_image(&heightmap, &args.mode);
     let (start_x, start_y) = (heightmap.width as f32 / 2., heightmap.height as f32 / 2.);

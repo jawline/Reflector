@@ -1,18 +1,16 @@
 import sys
 import torch
 import pickle
-from torch import tensor, cat
-from train import train, train_auto
+from torch import cat
+from train import train
 from dataset import TerrainDataset
 from infer import (
     masked_inference,
     generative_inference,
-    whole_datasource_tiled_inference,
 )
+from tiled_inference import whole_datasource_simple_grid_inference
 from constants import tile_size
-from infer import display_reverse
-from math import nan
-from torch import isnan, logical_not, nan_to_num
+from models.diffusion import Model as SimpleModel
 import preprocess
 
 
@@ -43,14 +41,9 @@ def main():
         print("Starting training")
         print("Loading", dataset)
         dataset = TerrainDataset(dataset)
-        train(
-            dataset, checkpoint_path=checkpoint, lr=2e-5, num_epochs=75, device=device
-        )
-    elif mode == "train-auto":
-        dataset = TerrainDataset(dataset)
-        train_auto(
-            dataset, checkpoint_path=checkpoint, lr=2e-5, num_epochs=75, device=device
-        )
+        model = SimpleModel(lr=1e-4, device=device)
+        model.load(checkpoint)
+        train(model, dataset, num_epochs=75, device=device, checkpoint_path=checkpoint)
     elif mode == "infer":
         print("Starting inference")
         print("Loading", dataset)
@@ -73,14 +66,18 @@ def main():
 
         print("Prepared", without_nan.shape, mask.shape)
 
+
+        model = SimpleModel(lr=1e-4, device=device)
+        model.load(checkpoint)
+
         # display_reverse([without_nan, mask])
 
-        inferred_frame = whole_datasource_tiled_inference(
+        inferred_frame = whole_datasource_simple_grid_inference(
             without_nan,
             mask,
             tile_size,
             device=device,
-            checkpoint_path=checkpoint,
+            model=model,
         )
 
         print(inferred_frame.shape)

@@ -1,6 +1,6 @@
 from torch import nn
-from res_block import ResBlock
-from attention import Attention
+from .res_block import ResBlock
+from .attention import Attention
 
 
 class UnetLayer(nn.Module):
@@ -27,9 +27,9 @@ class UnetLayer(nn.Module):
                 C, num_heads=num_heads, dropout_prob=dropout_prob
             )
 
-    def forward(self, x, embeddings):
-        x = self.ResBlock1(x, embeddings)
+    def forward(self, x):
+        x = self.ResBlock1(x)
         if hasattr(self, "attention_layer"):
             x = self.attention_layer(x)
-        x = self.ResBlock2(x, embeddings)
+        x = self.ResBlock2(x)
         return self.conv(x), x

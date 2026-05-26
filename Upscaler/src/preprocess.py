@@ -45,10 +45,16 @@ def load(path):
     width = heightmap["width"]
     height = heightmap["height"]
 
+<<<<<<< HEAD
     with_nan = tensor([x if x != None else nan for x in heightmap["data"]]).reshape(
+=======
+    assert classification["width"] == width
+    assert classification["height"] == height
+
+    with_nan = tensor([x if x is not None else nan for x in heightmap["data"]]).reshape(
+>>>>>>> 307a4a276f2288e3ddc560d43bb10f6bdb81882e
         (height, width)
     )
-    nans = isnan(with_nan)
     without_nan = nan_to_num(with_nan, nan=0.0)
 
     mask = logical_not(nans)

@@ -1,6 +1,5 @@
 use clap::Parser;
 use log::{error, info, warn};
-use serde::{Deserialize, Serialize};
 use serde_pickle::{DeOptions, SerOptions};
 use std::fs::{read, File};
 use threecrate_io::{obj::ObjWriter, MeshWriter};
@@ -8,7 +7,7 @@ use threecrate_io::{obj::ObjWriter, MeshWriter};
 use rust_las_printer::{
     las_converter::{
         classification::ClassificationType,
-        heightmap::{Heightmap, InterpolationMode, StreamingHeightmap},
+        heightmap::{Heightmap, HeightmapAndClassification, InterpolationMode, StreamingHeightmap},
         las_data::{load_from_directory, Limits},
         las_keep_filter::LasKeepFilter,
     },
@@ -150,12 +149,6 @@ fn build_classification_layer(
         height: terrain.height,
         scale_z: 1.,
     }
-}
-
-#[derive(Serialize, Deserialize)]
-struct HeightmapAndClassification {
-    heightmap: Heightmap<Option<f32>>,
-    classification: Heightmap<ClassificationType>,
 }
 
 fn generate_heightmap(args: GenerateHeightmap) {
