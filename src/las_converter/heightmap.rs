@@ -1,4 +1,5 @@
 use super::las_data::Limits;
+use crate::las_converter::classification::ClassificationType;
 use itertools::iproduct;
 use log::info;
 use remedian::RemedianBlock;
@@ -50,6 +51,12 @@ impl<T: Clone + Copy> IndexMut<(usize, usize)> for Heightmap<T> {
         let idx = self.offset((x, y));
         &mut self.data[idx]
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct HeightmapAndClassification {
+    pub heightmap: Heightmap<Option<f32>>,
+    pub classification: Heightmap<ClassificationType>,
 }
 
 pub enum InterpolationMode {
