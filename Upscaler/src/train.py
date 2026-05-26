@@ -38,14 +38,14 @@ def train(
             tqdm(train_loader, desc=f"Epoch {i + 1}/{num_epochs}")
         ):
             for_train = (
-                datapoint["terrain_with_classification"]
+                datapoint["terrain"]
                 .to(device, non_blocking=True)
                 .squeeze(1)
             )
 
             mask = datapoint["mask"].to(device, non_blocking=True).squeeze(1)
 
-            # print(for_train.shape, mask.shape)
+            print(for_train.shape, mask.shape)
 
             # Randomly choose to transpose the X,Y (We could during data generation rotate the entire tile before translating it to a heightmap, but that is trickier)
             if random.choice([True, False]):
@@ -77,7 +77,7 @@ def train(
             for_autoencoder = for_train * total_mask
 
             loss = model.train_step(
-                for_autoencoder, total_mask, for_train[:, 0:1, :, :], mask
+                for_autoencoder, total_mask, for_train, mask
             )
             total_loss += loss.item()
 

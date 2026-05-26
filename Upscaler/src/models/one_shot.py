@@ -38,9 +38,7 @@ class Model:
         print("Saved checkpoint to", checkpoint_path)
 
     def forward(self, data, mask):
-        # We only care about the model learning the masked region
-        inference = self.model.forward(data, mask)[:,0:1,:,:]
-        data = data[:,0:1,:,:]
+        inference = self.model.forward(data, mask)
         return data + (~mask * inference)
 
     def infer(self, src_frame, src_mask, device=None):

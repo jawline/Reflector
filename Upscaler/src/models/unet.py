@@ -17,7 +17,6 @@ from torch.nn.functional import (
     conv_transpose2d,
     conv2d,
     pad,
-    one_hot,
 )
 from einops import rearrange
 from math import log
@@ -100,10 +99,9 @@ class AddCoords(nn.Module):
 class PartialConv2d(nn.Conv2d):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Multi-channel mask weight: [Out, In, H, W]
-        mask_weight = ones(self.out_channels, self.in_channels, *self.kernel_size)
+        mask_weight = ones(1, 1, *self.kernel_size)
         self.register_buffer("mask_weight", mask_weight)
-        self.max_mask_val = self.in_channels * self.kernel_size[0] * self.kernel_size[1]
+        self.max_mask_val = self.kernel_size[0] * self.kernel_size[1]
 
     def forward(self, x, mask=None):
 
@@ -142,12 +140,9 @@ class PartialConv2d(nn.Conv2d):
 class PartialConvTranspose2d(nn.ConvTranspose2d):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Transpose weight shape: [in_channels, out_channels, k, k]
-        mask_weight = ones(self.in_channels, self.out_channels, *self.kernel_size)
+        mask_weight = ones(1, 1, *self.kernel_size)
         self.register_buffer("mask_weight", mask_weight)
-
-        # In Transpose, the scaling is based on the input channels contributing to the output
-        self.max_mask_val = self.in_channels * self.kernel_size[0] * self.kernel_size[1]
+        self.max_mask_val = self.kernel_size[0] * self.kernel_size[1]
 
     def forward(self, x, mask=None):
 
@@ -318,16 +313,14 @@ class Net(nn.Module):
         num_attention: int = 4,
         dropout_prob: float = 0.01,
         num_heads: int = 8,
-        input_channels: int = 2,
+        input_channels: int = 1,
         output_channels: int = 1,
     ):
         super().__init__()
         self.coords = AddCoords(256, 256)
 
-        # We assume the final channel of input is a preclassification
-        # We then add a 2 channel for coords and a one hot encoding of the final channel
         self.shallow_conv = PartialConv2d(
-            (input_channels - 1) + 3 + 2,
+            input_channels + 2,
             Downsamples[0],
             kernel_size=7,
             dilation=1,
@@ -379,21 +372,9 @@ class Net(nn.Module):
     def forward(self, data, mask):
         mask = mask.float()
 
-        # Our data is in the form [ some channels of continuous data ; classification channel (0 | 1 | 2) ]
-        num_non_classification_channels = data.shape[1] - 1
-
-        # Generate a one hot encoding of our class and then express it as [B; C; H; W]
-        classification_channel = data[:, -1, :, :].long()
-        discrete = one_hot(classification_channel, num_classes=3)
-        discrete = discrete.permute(0, 3, 1, 2)
-
-        origin = data[:, 0:num_non_classification_channels, :, :]
         coords = self.coords(data)
 
-        data = cat([origin, discrete, coords], dim=1)
-
-        # Our mask is a single channel input, expand it to all channels
-        mask = mask.expand(-1, data.shape[1], -1, -1)
+        data = cat([data, coords], dim=1)
 
         data, mask = self.shallow_conv(data, mask)
 
@@ -434,7 +415,7 @@ class WithSinusoidalEmbedding(Net):
         num_attention: int = 4,
         dropout_prob: float = 0.01,
         num_heads: int = 8,
-        input_channels: int = 2,
+        input_channels: int = 1,
         output_channels: int = 1,
         time_steps: int = None,
     ):
