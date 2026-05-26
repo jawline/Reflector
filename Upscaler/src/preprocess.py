@@ -1,6 +1,6 @@
 import pickle
 import functools
-from torch import tensor, logical_not, masked_select, cat, isnan, nan_to_num, flip
+from torch import tensor, logical_not, masked_select, isnan, nan_to_num, flip
 from torch.utils.data import Dataset
 from glob import glob
 from math import floor, ceil
@@ -37,37 +37,26 @@ def unnorm(image, min_values, max_values):
 
 
 # LRU cache the result so indexing into the same file is cheaper
-@functools.lru_cache(maxsize=64)
+@functools.lru_cache(maxsize=256)
 def load(path):
     with open(path, "rb") as file:
-        print("Loading", path)
         sample = pickle.load(file)
 
     heightmap = sample["heightmap"]
-    classification = sample["classification"]
 
     width = heightmap["width"]
     height = heightmap["height"]
-
-    assert classification["width"] == width
-    assert classification["height"] == height
 
     with_nan = tensor([x if x != None else nan for x in heightmap["data"]]).reshape(
         (height, width)
     )
     nans = isnan(with_nan)
     without_nan = nan_to_num(with_nan, nan=0.0)
-    classification = tensor([x for x in classification["data"]]).reshape(with_nan.shape)
 
-    mask = classification != 0  # 0 is unknown, 1 is ground, 2 is buildings
-
-    # print("WH", width, height, sample["classification"]["width"], sample["classification"]["height"])
+    mask = logical_not(nans)
 
     heightmap["mask"] = mask
     heightmap["without_nan"] = without_nan
-    heightmap["classification"] = classification
-
-    # display_reverse([with_nan, without_nan, classification])
 
     return heightmap
 
@@ -124,21 +113,13 @@ class TerrainDatasetSlow(Dataset):
         end_y = start_y + self.sample_y
 
         without_nan = sample["without_nan"][start_y:end_y, start_x:end_x]
-        classification = sample["classification"][start_y:end_y, start_x:end_x]
         mask = sample["mask"][start_y:end_y, start_x:end_x]
 
-        # print("Input shapes", sample["mask"].shape, without_nan.shape, classification.shape)
-
-        # Combine the classification and without nan into two channels in a single tensor
-        terrain_with_classification = cat(
-            [without_nan.unsqueeze(0), classification.unsqueeze(0)], dim=0
-        )
+        terrain = without_nan.unsqueeze(0)
 
         mask = mask.unsqueeze(0)
 
-        # print("Final shapes", terrain_with_classification.shape, mask.shape)
-
-        return terrain_with_classification, mask
+        return terrain, mask
 
     def reject_candidate(self, mask):
         mask = mask.flatten()
@@ -150,7 +131,7 @@ class TerrainDatasetSlow(Dataset):
         # Make this deterministic for a given self.files by seeding rand per iteration with the idx
         rand = Random(idx)
         sample = load(self.files[idx])
-        terrain_with_classification = tensor([])
+        terrain = tensor([])
         mask = tensor([])
         attempts = 0
 
@@ -158,7 +139,7 @@ class TerrainDatasetSlow(Dataset):
         broken = self.files[idx] in self.broken
 
         while not broken:
-            terrain_with_classification, mask = self.candidate(rand, sample)
+            terrain, mask = self.candidate(rand, sample)
             if not self.reject_candidate(mask):
                 break
             attempts += 1
@@ -167,7 +148,7 @@ class TerrainDatasetSlow(Dataset):
                 self.broken.add(self.files[idx])
 
         return {
-            "terrain_with_classification": terrain_with_classification,
+            "terrain": terrain,
             "mask": mask,
             "broken": broken,
         }
