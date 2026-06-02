@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -uvx
+echo "Doing $1 to $2 using $3ppd"
+mkdir -p "$2"
+count=0
+IFS=$'\n'
+for file in `find "$1"  -type f -name "*.la*"`; do
+  to_name="$2/${count}.pre.pt"
+  echo "Processing $file to $to_name"
+  RUST_LOG=info cargo run --release --bin converter -- generate-heightmap --las-folder-path "$file" --output-path "$to_name" --pixels-per-unit-dim "$3" --max-threads 1 --include-vegetation
+  count=$((count+1))
+done

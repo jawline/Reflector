@@ -49,6 +49,7 @@ def load(path):
         (height, width)
     )
     without_nan = nan_to_num(with_nan, nan=0.0)
+    nans = isnan(with_nan)
 
     mask = logical_not(nans)
 
@@ -65,7 +66,6 @@ class TerrainDatasetSlow(Dataset):
         # Sort for deterministic ordering between workers
         files = sorted(glob(f"{samples_dir}/**/**.pre.pt", recursive=True))
         self.files = [f for f in files for _ in range(samples_per_file)]
-        self.broken = set()
 
     def __len__(self):
         return len(self.files)
@@ -99,19 +99,14 @@ class TerrainDatasetSlow(Dataset):
         terrain = tensor([])
         mask = tensor([])
 
-        if self.files[idx] in self.broken:
-            return {"terrain": terrain, "mask": mask, "broken": True}
-
         sample = load(self.files[idx])
 
         if sample["width"] < self.sample_x or sample["height"] < self.sample_y:
-            self.broken.add(self.files[idx])
             return {"terrain": terrain, "mask": mask, "broken": True}
 
         terrain, mask = self.candidate(rand, sample)
 
         if self.reject_candidate(mask):
-            self.broken.add(self.files[idx])
             return {"terrain": tensor([]), "mask": tensor([]), "broken": True}
 
         return {"terrain": terrain, "mask": mask, "broken": False}

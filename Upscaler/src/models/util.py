@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 
 def set_seed(seed: int = 42):
+    torch.set_float32_matmul_precision("high")
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
@@ -25,8 +26,10 @@ def dataloader(dataset, batch_size):
         batch_size=batch_size,
         shuffle=True,
         drop_last=True,
-        num_workers=6,
-        prefetch_factor=64,
+        num_workers=2,
+        prefetch_factor=8,
+        pin_memory=True,
+        persistent_workers=True,
     )
 
 
@@ -66,7 +69,6 @@ def apply_batch_noise(masks, count):
 def display_images(images, to_file=None):
     fig, axes = plt.subplots(1, len(images), figsize=(len(images), 1))
     for i, ax in enumerate(axes.flat):
-
         x = images[i]
 
         while x.dim() > 2:

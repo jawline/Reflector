@@ -10,7 +10,7 @@ from infer import (
 )
 from tiled_inference import whole_datasource_simple_grid_inference
 from constants import tile_size
-from models.diffusion import Model as SimpleModel
+from models.one_shot import Model as SimpleModel
 import preprocess
 
 
@@ -65,7 +65,6 @@ def main():
         without_nan = cat([without_nan, classification], dim=1)
 
         print("Prepared", without_nan.shape, mask.shape)
-
 
         model = SimpleModel(lr=1e-4, device=device)
         model.load(checkpoint)

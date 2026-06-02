@@ -30,7 +30,6 @@ def aa(tensor):
 def display_reverse(images: List, to_file=None):
     fig, axes = plt.subplots(1, len(images), figsize=(10, 1))
     for i, ax in enumerate(axes.flat):
-
         x = images[i]
 
         while x.dim() > 2:
@@ -129,7 +128,12 @@ def compute_edge_reachable(src_mask):
         cy, cx = q.popleft()
         for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
             ny, nx = cy + dy, cx + dx
-            if 0 <= ny < h and 0 <= nx < w and not mask[ny, nx] and not reachable[ny, nx]:
+            if (
+                0 <= ny < h
+                and 0 <= nx < w
+                and not mask[ny, nx]
+                and not reachable[ny, nx]
+            ):
                 reachable[ny, nx] = True
                 q.append((ny, nx))
 
@@ -158,7 +162,6 @@ def tiled_inference(src_frame, src_mask, src_keep, model, kernel_size, device):
     src_width = src_frame.shape[-1]
 
     print("Beginning tiled inference", src_frame.shape, src_mask.shape, src_keep.shape)
-
 
     for start_y in range(0, src_frame.shape[-2], kernel_size - min_tile_overlap):
         print("Start y", start_y)
@@ -204,9 +207,7 @@ def tiled_inference(src_frame, src_mask, src_keep, model, kernel_size, device):
                 print("Inferring tile", start_x, start_y, tile_data.shape)
                 print(tile_data.shape, tile_mask.shape)
 
-                inference = model.infer(
-                    tile_data, tile_mask, device=device
-                )
+                inference = model.infer(tile_data, tile_mask, device=device)
                 # display_reverse(
                 #    [
                 #        additional_tile_data.to("cpu"),
@@ -383,9 +384,9 @@ def centered_tiled_inference(src_frame, src_mask, src_keep, model, kernel_size, 
             )
 
             # Write back full tile (height channel only, preserve classification)
-            src_frame[
-                :, 0:1, start_y:end_y, start_x:end_x
-            ] = reconstructed_frame[:, 0:1, :, :]
+            src_frame[:, 0:1, start_y:end_y, start_x:end_x] = reconstructed_frame[
+                :, 0:1, :, :
+            ]
             src_mask[:, :, start_y:end_y, start_x:end_x] = ones(
                 (1, 1, kernel_size, kernel_size), dtype=torch.bool, device=device
             )
@@ -406,7 +407,9 @@ def centered_tiled_inference(src_frame, src_mask, src_keep, model, kernel_size, 
                 to_file=f"centered_{seq:04d}",
             )
         else:
-            print(f"Skipping tile ({start_x}, {start_y}) — all keep pixels already valid")
+            print(
+                f"Skipping tile ({start_x}, {start_y}) — all keep pixels already valid"
+            )
 
         processed.add(idx)
         seq += 1
@@ -414,7 +417,7 @@ def centered_tiled_inference(src_frame, src_mask, src_keep, model, kernel_size, 
         for ni in neighbors[idx]:
             try_enqueue(ni)
 
-    return src_frame[:,0:1,:,:]
+    return src_frame[:, 0:1, :, :]
 
 
 def whole_datasource_tiled_inference(
@@ -426,7 +429,6 @@ def whole_datasource_tiled_inference(
     num_time_steps: int = num_time_steps,
     ema_decay: float = 0.9999,
 ):
-
     print("Starting to compute infill mask", src_mask.shape)
     keep_mask = compute_infill_keep_mask(src_mask[0][0]).reshape(src_mask.shape)
     print("Computed infill mask")
@@ -452,7 +454,9 @@ def whole_datasource_tiled_inference(
     return result
 
 
-def simple_grid_tiled_inference(src_frame, src_mask, src_keep, model, kernel_size, device):
+def simple_grid_tiled_inference(
+    src_frame, src_mask, src_keep, model, kernel_size, device
+):
     src_frame = src_frame.to(device)
     src_mask = src_mask.to(device)
     src_keep = src_keep.to(device)
@@ -463,9 +467,10 @@ def simple_grid_tiled_inference(src_frame, src_mask, src_keep, model, kernel_siz
 
     print(
         "Beginning simple grid tiled inference",
-        src_frame.shape, src_mask.shape, src_keep.shape,
+        src_frame.shape,
+        src_mask.shape,
+        src_keep.shape,
     )
-
 
     display_reverse(
         [
@@ -494,7 +499,9 @@ def simple_grid_tiled_inference(src_frame, src_mask, src_keep, model, kernel_siz
             print(f"Tile ({start_x}, {start_y})")
 
             class_ch = tile_data[:, 1:2, :, :]
-            print(f"  classification channel: min={class_ch.min().item():.3f} max={class_ch.max().item():.3f} mean={class_ch.mean().item():.3f} unique={torch.unique(class_ch).tolist()}")
+            print(
+                f"  classification channel: min={class_ch.min().item():.3f} max={class_ch.max().item():.3f} mean={class_ch.mean().item():.3f} unique={torch.unique(class_ch).tolist()}"
+            )
 
             if logical_and(tile_keep, logical_not(tile_mask)).any():
                 print(f"Inferring tile ({start_x}, {start_y})", tile_data.shape)
@@ -503,14 +510,18 @@ def simple_grid_tiled_inference(src_frame, src_mask, src_keep, model, kernel_siz
 
                 print("Recombining inference", tile_data.shape, inference.shape)
 
-                origin_frame = tile_data[:,0:1,:,:]
+                origin_frame = tile_data[:, 0:1, :, :]
 
                 reconstructed_frame = (origin_frame * logical_not(tile_keep)) + (
                     inference * tile_keep
                 )
 
-                print(f"  inference: min={inference.min().item():.4f} max={inference.max().item():.4f} mean={inference.mean().item():.4f}")
-                print(f"  reconstructed: min={reconstructed_frame.min().item():.4f} max={reconstructed_frame.max().item():.4f}")
+                print(
+                    f"  inference: min={inference.min().item():.4f} max={inference.max().item():.4f} mean={inference.mean().item():.4f}"
+                )
+                print(
+                    f"  reconstructed: min={reconstructed_frame.min().item():.4f} max={reconstructed_frame.max().item():.4f}"
+                )
 
                 src_frame[:, 0:1, start_y:end_y, start_x:end_x] = reconstructed_frame
                 src_mask[:, :, start_y:end_y, start_x:end_x] = ones(
@@ -533,7 +544,7 @@ def simple_grid_tiled_inference(src_frame, src_mask, src_keep, model, kernel_siz
                     ],
                     to_file=f"grid_{start_y}_{start_x}",
                 )
-                
+
             else:
                 print(f"Skipping tile ({start_x}, {start_y})")
 
@@ -551,11 +562,12 @@ def whole_datasource_simple_grid_inference(
     denoise_sigma: float = 0.5,
     median_kernel: int = 4,
 ):
-
     print("Starting to compute infill mask", src_mask.shape)
 
     keep_mask = compute_infill_keep_mask(src_mask[0][0]).reshape(src_mask.shape)
-    pixels_that_will_be_missing_after_inference = logical_and(logical_not(src_mask), logical_not(keep_mask))
+    pixels_that_will_be_missing_after_inference = logical_and(
+        logical_not(src_mask), logical_not(keep_mask)
+    )
     print("Computed infill mask")
 
     result_before_flood = simple_grid_tiled_inference(
@@ -563,15 +575,24 @@ def whole_datasource_simple_grid_inference(
     )
     print("inference result", result_before_flood.shape)
 
-    result = flood_fill_nans(result_before_flood.clone(), pixels_that_will_be_missing_after_inference)
+    result = flood_fill_nans(
+        result_before_flood.clone(), pixels_that_will_be_missing_after_inference
+    )
     print("Post-flood-fill result", result.shape)
 
     if median_kernel > 1:
         pad = median_kernel // 2
         height_ch = result[:, 0:1, :, :]
-        padded = torch.nn.functional.pad(height_ch, (pad, pad, pad, pad), mode="replicate")
+        padded = torch.nn.functional.pad(
+            height_ch, (pad, pad, pad, pad), mode="replicate"
+        )
         patches = padded.unfold(2, median_kernel, 1).unfold(3, median_kernel, 1)
-        result[:, 0:1, :, :] = patches.contiguous().view(*height_ch.shape[:2], height_ch.shape[2], height_ch.shape[3], -1).median(dim=-1).values
+        result[:, 0:1, :, :] = (
+            patches.contiguous()
+            .view(*height_ch.shape[:2], height_ch.shape[2], height_ch.shape[3], -1)
+            .median(dim=-1)
+            .values
+        )
         print(f"Median filtered with kernel={median_kernel}")
 
     if denoise_sigma > 0:
@@ -611,7 +632,12 @@ def _label_connected_components(mask):
                     idx += 1
                     for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                         ny, nx = cy + dy, cx + dx
-                        if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and labels[ny, nx] == 0:
+                        if (
+                            0 <= ny < h
+                            and 0 <= nx < w
+                            and mask[ny, nx]
+                            and labels[ny, nx] == 0
+                        ):
                             labels[ny, nx] = current_label
                             queue.append((ny, nx))
     return labels, current_label
@@ -640,7 +666,9 @@ def flood_fill_nans(frame, missing):
     result = h.copy()
 
     valid_mask = ~m
-    range_val = result[valid_mask].max() - result[valid_mask].min() if valid_mask.any() else 0.0
+    range_val = (
+        result[valid_mask].max() - result[valid_mask].min() if valid_mask.any() else 0.0
+    )
     fill_offset = range_val * 0.01
 
     labels, num_features = _label_connected_components(m)
@@ -661,9 +689,9 @@ def flood_fill_nans(frame, missing):
             else:
                 result[component] = 0.0
 
-    frame[:, 0:1, :, :] = torch.tensor(
-        result, device=device, dtype=dtype
-    ).view(1, 1, *result.shape)
+    frame[:, 0:1, :, :] = torch.tensor(result, device=device, dtype=dtype).view(
+        1, 1, *result.shape
+    )
 
     return frame
 
@@ -677,11 +705,12 @@ def whole_datasource_centered_tiled_inference(
     num_time_steps: int = num_time_steps,
     ema_decay: float = 0.9999,
 ):
-
     print("Starting to compute infill mask", src_mask.shape)
 
     keep_mask = compute_infill_keep_mask(src_mask[0][0]).reshape(src_mask.shape)
-    pixels_that_will_be_missing_after_inference = logical_and(logical_not(src_mask), logical_not(keep_mask))
+    pixels_that_will_be_missing_after_inference = logical_and(
+        logical_not(src_mask), logical_not(keep_mask)
+    )
     print("Computed infill mask")
 
     result_before_flood = centered_tiled_inference(
@@ -689,7 +718,9 @@ def whole_datasource_centered_tiled_inference(
     )
     print("inference result", result_before_flood.shape)
 
-    result = flood_fill_nans(result_before_flood.clone(), pixels_that_will_be_missing_after_inference)
+    result = flood_fill_nans(
+        result_before_flood.clone(), pixels_that_will_be_missing_after_inference
+    )
     print("Post-flood-fill result", result.shape)
 
     display_reverse(

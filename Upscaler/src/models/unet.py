@@ -1,3 +1,4 @@
+import torch
 from torch import (
     exp,
     sin,
@@ -44,16 +45,12 @@ class Attention(nn.Module):
         self.num_heads = num_heads
         self.dropout_prob = dropout_prob
 
-    def forward(self, x, mask):  # Accept mask here
+    def forward(self, x, mask):
         b, c, h, w = x.shape
 
         if mask is not None:
-            # 1. Take only the first channel of the mask [B, 1, H, W]
-            # 2. Flatten to [B, 1, L]
-            # 3. Add a dimension for heads to get [B, 1, 1, L]
             m = mask[:, :1, :, :]
             m = rearrange(m, "b c h w -> b c (h w)").unsqueeze(1)
-            # m is now [8, 1, 1, 1024] - this will work!
         else:
             m = None
 
@@ -63,12 +60,11 @@ class Attention(nn.Module):
 
         q, k, v = x[0], x[1], x[2]
 
-        # Pass the mask here
         x = scaled_dot_product_attention(
             q,
             k,
             v,
-            attn_mask=(m > 0.5),  # Apply the flattened mask
+            attn_mask=(m > 0.5),
             is_causal=False,
             dropout_p=self.dropout_prob if self.training else 0,
         )
@@ -104,14 +100,11 @@ class PartialConv2d(nn.Conv2d):
         self.max_mask_val = self.kernel_size[0] * self.kernel_size[1]
 
     def forward(self, x, mask=None):
-
-        # Use 'replicate' instead of 'reflection' - it's more robust at edges
         p = (self.padding[1], self.padding[1], self.padding[0], self.padding[0])
         x_padded = pad(x * mask, p, mode="replicate")
         mask_padded = pad(mask, p, mode="constant", value=0)
 
         with no_grad():
-            # padding=0 because we padded manually
             mask_sum = conv2d(
                 mask_padded,
                 self.mask_weight,
@@ -122,7 +115,7 @@ class PartialConv2d(nn.Conv2d):
                 self.groups,
             )
 
-            mask_ratio = self.max_mask_val / (mask_sum + 1e-8)
+            mask_ratio = self.max_mask_val / (mask_sum + 1e-6)
             new_mask = clamp(mask_sum, 0, 1)
 
         raw_out = conv2d(
@@ -145,7 +138,6 @@ class PartialConvTranspose2d(nn.ConvTranspose2d):
         self.max_mask_val = self.kernel_size[0] * self.kernel_size[1]
 
     def forward(self, x, mask=None):
-
         with no_grad():
             mask_sum = conv_transpose2d(
                 mask,
@@ -157,7 +149,7 @@ class PartialConvTranspose2d(nn.ConvTranspose2d):
                 self.groups,
                 self.dilation,
             )
-            mask_ratio = self.max_mask_val / (mask_sum + 1e-8)
+            mask_ratio = self.max_mask_val / (mask_sum + 1e-6)
             new_mask = clamp(mask_sum, 0, 1)
 
         raw_out = conv_transpose2d(
@@ -175,7 +167,6 @@ class PartialConvTranspose2d(nn.ConvTranspose2d):
         if self.bias is not None:
             output += self.bias.view(1, self.out_channels, 1, 1)
 
-        # Manual Cropping
         if self.padding[0] > 0 or self.padding[1] > 0:
             p_h, p_w = self.padding
             output = output[:, :, p_h:-p_h, p_w:-p_w]
@@ -197,7 +188,7 @@ class MaskedInstanceNorm2d(nn.Module):
         x = x * mask
 
         mask_sum = mask.sum(dim=(2, 3), keepdim=True)
-        mu = x.sum(dim=(2, 3), keepdim=True) / (mask_sum + 1e-8)
+        mu = x.sum(dim=(2, 3), keepdim=True) / (mask_sum + 1e-6)
 
         x_shifted = x - mu
         var = (x_shifted**2).sum(dim=(2, 3), keepdim=True) / (mask_sum + self.eps)
@@ -216,15 +207,14 @@ class MaskedInstanceNorm2d(nn.Module):
 class ResBlock(nn.Module):
     def __init__(self, C: int, dropout_prob: float):
         super().__init__()
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU()
         self.norm1 = MaskedInstanceNorm2d(C, affine=True)
         self.norm2 = MaskedInstanceNorm2d(C, affine=True)
         self.conv1 = PartialConv2d(C, C, kernel_size=3, dilation=1, padding=1)
         self.conv2 = PartialConv2d(C, C, kernel_size=3, dilation=1, padding=1)
-        self.dropout = nn.Dropout(p=dropout_prob, inplace=True)
+        self.dropout = nn.Dropout(p=dropout_prob)
 
     def forward(self, inp, mask):
-
         x = inp
 
         x = self.norm1(x, mask)
@@ -241,7 +231,6 @@ class ResBlock(nn.Module):
 
 
 class DownLayer(nn.Module):
-
     def __init__(
         self,
         dropout_prob: float,
@@ -249,7 +238,7 @@ class DownLayer(nn.Module):
         C: int,
     ):
         super().__init__()
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU()
         self.r = ResBlock(C=C, dropout_prob=dropout_prob)
         self.conv = PartialConv2d(C, C * 2, kernel_size=3, stride=2, padding=1)
 
@@ -261,7 +250,6 @@ class DownLayer(nn.Module):
 
 
 class UpLayer(nn.Module):
-
     def __init__(
         self,
         dropout_prob: float,
@@ -269,7 +257,7 @@ class UpLayer(nn.Module):
         C: int,
     ):
         super().__init__()
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU()
         self.r = ResBlock(C=C // 2, dropout_prob=dropout_prob)
         self.conv = PartialConvTranspose2d(
             C, C // 2, kernel_size=4, stride=2, padding=1
@@ -283,7 +271,6 @@ class UpLayer(nn.Module):
 
 
 class AttentionLayer(nn.Module):
-
     def __init__(
         self,
         dropout_prob: float,
@@ -291,7 +278,7 @@ class AttentionLayer(nn.Module):
         C: int,
     ):
         super().__init__()
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU()
         self.norm = MaskedInstanceNorm2d(C, affine=True)
         self.r = ResBlock(C=C, dropout_prob=dropout_prob)
         self.a = Attention(C=C, num_heads=num_heads, dropout_prob=dropout_prob)
@@ -367,8 +354,9 @@ class Net(nn.Module):
         self.output_conv = PartialConv2d(
             out_channels // 2, output_channels, kernel_size=1
         )
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU()
 
+    @torch.compile
     def forward(self, data, mask):
         mask = mask.float()
 
@@ -390,13 +378,11 @@ class Net(nn.Module):
             data, mask = layer(data, mask)
 
         for i, layer in enumerate(self.upsamples):
-            # for residual in residuals:
-            #    print("RS", residual.shape)
             if i > 0:
                 residual = residuals.pop()
                 residual_mask = residual_masks.pop()
                 data = cat((data, residual), dim=1)
-                mask = cat((mask, residual_mask), dim=1)
+                mask = mask * residual_mask
             data, mask = layer(data, mask)
 
         data, mask = self.late_conv(data, mask)
@@ -430,6 +416,7 @@ class WithSinusoidalEmbedding(Net):
         )
         self.embed = SinusoidalEmbeddings(time_steps, embed_dim=128)
 
+    @torch.compile
     def forward(self, data, mask, t):
         embed = self.embed.forward(t).expand(-1, -1, data.shape[2], data.shape[3])
         data = cat([embed, data], dim=1)

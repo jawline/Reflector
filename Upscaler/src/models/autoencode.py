@@ -26,7 +26,6 @@ from labml_nn.diffusion.stable_diffusion.model.autoencoder import (
 
 
 class Autoencode:
-
     def __init__(self, lr, device=None):
         z_channels = 512
         emb_channels = 4

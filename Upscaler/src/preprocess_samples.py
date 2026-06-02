@@ -36,8 +36,13 @@ def main():
         log_file = open(log_path, "w")
         p = subprocess.Popen(
             [
-                sys.executable, __file__,
-                "--worker", from_, to_, str(start), str(end),
+                sys.executable,
+                __file__,
+                "--worker",
+                from_,
+                to_,
+                str(start),
+                str(end),
             ],
             stdout=log_file,
             stderr=subprocess.STDOUT,
@@ -54,7 +59,11 @@ def main():
 if __name__ == "__main__":
     if "--worker" in sys.argv:
         idx = sys.argv.index("--worker")
-        worker(sys.argv[idx + 1], sys.argv[idx + 2],
-               int(sys.argv[idx + 3]), int(sys.argv[idx + 4]))
+        worker(
+            sys.argv[idx + 1],
+            sys.argv[idx + 2],
+            int(sys.argv[idx + 3]),
+            int(sys.argv[idx + 4]),
+        )
     else:
         main()

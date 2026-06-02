@@ -13,7 +13,6 @@ from constants import num_time_steps
 def display_reverse(images: List, to_file=None):
     fig, axes = plt.subplots(1, len(images), figsize=(10, 1))
     for i, ax in enumerate(axes.flat):
-
         x = images[i]
 
         while x.dim() > 2:

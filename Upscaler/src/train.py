@@ -4,7 +4,7 @@ from torch import (
 )
 from tqdm import tqdm
 
-from torch import rand, rand_like, logical_not, transpose, ones_like
+from torch import rand, rand_like, logical_not, transpose, ones_like, zeros
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 # from infer import display_reverse
@@ -28,39 +28,25 @@ def train(
     scheduler = ReduceLROnPlateau(model.optimizer, mode="min", patience=0, factor=0.1)
 
     for i in range(num_epochs):
+        # print("Optimizer state")
+        # for param_group in model.optimizer.param_groups:
+        #    print(param_group["lr"])
 
-        print("Optimizer state")
-        for param_group in model.optimizer.param_groups:
-            print(param_group["lr"])
-
-        total_loss = 0
+        total_loss = zeros(1, device=device)
         for bidx, datapoint in enumerate(
             tqdm(train_loader, desc=f"Epoch {i + 1}/{num_epochs}")
         ):
-            for_train = (
-                datapoint["terrain"]
-                .to(device, non_blocking=True)
-                .squeeze(1)
-            )
-
+            for_train = datapoint["terrain"].to(device, non_blocking=True).squeeze(1)
             mask = datapoint["mask"].to(device, non_blocking=True).squeeze(1)
 
-            print(for_train.shape, mask.shape)
+            #print(for_train.shape, mask.shape)
 
-            # Randomly choose to transpose the X,Y (We could during data generation rotate the entire tile before translating it to a heightmap, but that is trickier)
             if random.choice([True, False]):
                 for_train = transpose(for_train, -1, -2)
                 mask = transpose(mask, -1, -2)
 
-            # print(for_train.shape, mask.shape)
-
-            # Take a random element from the batch and combine its missing data with our own so that we incorporate some real loooking missing data into our own input
             batch_noise = apply_batch_noise(mask, count=random.randint(1, 2))
 
-            # print(for_train.shape, mask.shape)
-
-            # Generate a bunch of random numbers (batch_size,) between 0 and 1 for a known noise addition
-            # Add some more noise to the image so the decoder can see some blank cells
             if random.choice([True, False, False, False, False]):
                 min_noise = 0.01
                 max_noise = 0.2
@@ -76,10 +62,8 @@ def train(
             total_mask = logical_and(batch_noise, additional_noise)
             for_autoencoder = for_train * total_mask
 
-            loss = model.train_step(
-                for_autoencoder, total_mask, for_train, mask
-            )
-            total_loss += loss.item()
+            loss = model.train_step(for_autoencoder, total_mask, for_train, mask)
+            total_loss += loss.detach()
 
             if (bidx % int(dataset_per_epoch // 50)) == 0:
                 print(
@@ -106,12 +90,14 @@ def train(
                     to_file=elt,
                 )
 
-        avg_loss = total_loss / dataset_per_epoch
+        avg_loss = (total_loss / dataset_per_epoch).item()
         scheduler.step(avg_loss)
 
-        print(f"Epoch {i + 1} | Loss {total_loss / (dataset_len / batch_size)} (Saved)")
+        print(
+            f"Epoch {i + 1} | Loss {(total_loss / (dataset_len / batch_size)).item()} (Saved)"
+        )
 
-        if total_loss < 0:
+        if total_loss.item() < 0:
             raise Exception("Explosion - self terminating")
 
         model.checkpoint(checkpoint_path)
