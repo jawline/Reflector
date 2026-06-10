@@ -57,7 +57,7 @@ class Model:
         active_learning_region = expected_good_mask * logical_not(mask)
         if active_learning_region.sum() == 0:
             print("Zero active region — skipping step")
-            return None, torch.zeros(1, device=data.device, requires_grad=False)
+            return torch.zeros(1, device=data.device, requires_grad=False)
 
         self.optimizer.zero_grad(set_to_none=True)
 
@@ -80,10 +80,10 @@ class Model:
                 if not torch.isfinite(val).all():
                     err.append(name)
             print(f"NaN/Inf loss — skipping ({', '.join(err)} component)")
-            return inferred, torch.zeros(1, device=loss.device, requires_grad=False)
+            return torch.zeros(1, device=loss.device, requires_grad=False)
 
         loss.backward()
         self.optimizer.step()
         self.scheduler.step()
 
-        return inferred, loss
+        return loss

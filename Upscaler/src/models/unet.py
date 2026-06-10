@@ -101,7 +101,7 @@ class PartialConv2d(nn.Conv2d):
 
     def forward(self, x, mask=None):
         p = (self.padding[1], self.padding[1], self.padding[0], self.padding[0])
-        x_padded = pad(x * mask, p, mode="replicate")
+        x_padded = pad(x * mask, p, mode="constant", value=0)
         mask_padded = pad(mask, p, mode="constant", value=0)
 
         with no_grad():
@@ -295,8 +295,8 @@ class AttentionLayer(nn.Module):
 class Net(nn.Module):
     def __init__(
         self,
-        Downsamples=[16, 32, 64],
-        Upsamples=[128, 128, 64 + 32],
+        Downsamples=[32, 64, 128],
+        Upsamples=[256, 256, 128 + 64],
         num_attention: int = 4,
         dropout_prob: float = 0.01,
         num_heads: int = 8,
@@ -356,7 +356,6 @@ class Net(nn.Module):
         )
         self.relu = nn.ReLU()
 
-    @torch.compile
     def forward(self, data, mask):
         mask = mask.float()
 
@@ -396,8 +395,8 @@ class Net(nn.Module):
 class WithSinusoidalEmbedding(Net):
     def __init__(
         self,
-        Downsamples=[16, 32, 64],
-        Upsamples=[128, 128, 64 + 32],
+        Downsamples=[32, 64, 128 ],
+        Upsamples=[256, 128, 64 + 3],
         num_attention: int = 4,
         dropout_prob: float = 0.01,
         num_heads: int = 8,
@@ -416,7 +415,6 @@ class WithSinusoidalEmbedding(Net):
         )
         self.embed = SinusoidalEmbeddings(time_steps, embed_dim=128)
 
-    @torch.compile
     def forward(self, data, mask, t):
         embed = self.embed.forward(t).expand(-1, -1, data.shape[2], data.shape[3])
         data = cat([embed, data], dim=1)
