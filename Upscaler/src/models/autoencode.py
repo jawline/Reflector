@@ -1,4 +1,6 @@
+import os
 import random
+import shutil
 import torch
 from torch import (
     nn,
@@ -107,6 +109,10 @@ class Autoencode:
                 "autoencoder": autoencoder.state_dict(),
                 "optimizer": optimizer.state_dict(),
             }
+            if os.path.exists(checkpoint_path):
+                backup_path = checkpoint_path + ".backup"
+                shutil.copy2(checkpoint_path, backup_path)
+                print("Backed up existing checkpoint to", backup_path)
             save(checkpoint, checkpoint_path)
             print("Saved checkpoint to", checkpoint_path)
 

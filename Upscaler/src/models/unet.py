@@ -101,8 +101,8 @@ class PartialConv2d(nn.Conv2d):
 
     def forward(self, x, mask=None):
         p = (self.padding[1], self.padding[1], self.padding[0], self.padding[0])
-        x_padded = pad(x * mask, p, mode="constant", value=0)
-        mask_padded = pad(mask, p, mode="constant", value=0)
+        x_padded = pad(x * mask, p, mode="replicate")
+        mask_padded = pad(mask, p, mode="replicate")
 
         with no_grad():
             mask_sum = conv2d(

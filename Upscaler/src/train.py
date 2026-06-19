@@ -14,7 +14,7 @@ from models.util import set_seed, dataloader, apply_batch_noise, display_images
 def train(
     model,
     dataset,
-    batch_size: int = 4,
+    batch_size: int = 8,
     num_epochs: int = 150,
     seed: int = -1,
     checkpoint_path: str = None,

@@ -1,3 +1,5 @@
+import os
+import shutil
 import torch
 from torch import save, nn, logical_not, randn_like, ones_like, cat
 from torch.optim import AdamW
@@ -72,6 +74,11 @@ class Model:
         }
 
         print("Saving checkpoint to", checkpoint_path)
+
+        if os.path.exists(checkpoint_path):
+            backup_path = checkpoint_path + ".backup"
+            shutil.copy2(checkpoint_path, backup_path)
+            print("Backed up existing checkpoint to", backup_path)
 
         save(checkpoint, checkpoint_path)
 
