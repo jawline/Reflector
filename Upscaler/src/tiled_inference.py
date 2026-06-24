@@ -165,7 +165,10 @@ def tiled_inference(src_frame, src_mask, src_keep, model, kernel_size, device):
 
     for start_y in range(0, src_frame.shape[-2], kernel_size - min_tile_overlap):
         print("Start y", start_y)
+
         for start_x in range(0, src_frame.shape[-1], kernel_size - min_tile_overlap):
+            print("Doing", start_x, start_y)
+
             last_x = False
             last_y = False
 
@@ -176,6 +179,8 @@ def tiled_inference(src_frame, src_mask, src_keep, model, kernel_size, device):
             if start_y + kernel_size >= src_height:
                 start_y -= start_y + kernel_size - src_height
                 last_y = True
+
+            raise Exception(start_x, start_y)
 
             end_x = start_x + kernel_size
             end_y = start_y + kernel_size
